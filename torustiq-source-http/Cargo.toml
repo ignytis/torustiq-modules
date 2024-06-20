@@ -1,0 +1,13 @@
+[package]
+name = "torustiq-source-http"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.6.0"
+log = "0.4.21"
+tokio = "1.38.0"
+torustiq-common = { path = "../torustiq-common" }
+
+[lib]
+crate-type = ["cdylib"]
