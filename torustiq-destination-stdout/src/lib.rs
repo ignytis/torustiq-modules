@@ -1,5 +1,3 @@
-use log::debug;
-
 use torustiq_common::{
     ffi::{
         types::module::{IoKind, ModuleInfo, ModuleInitStepArgs, ModuleProcessRecordFnResult, Record},
@@ -20,7 +18,6 @@ pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
 #[no_mangle]
 extern "C" fn torustiq_module_init_step(_args: ModuleInitStepArgs) {
     init_logger();
-    debug!("Stdout destination: initialized");
 }
 
 #[no_mangle]
