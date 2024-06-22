@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 log = "0.4.21"
 once_cell = "1.19.0"
+pyo3 = { version = "0.21.2", features = ["auto-initialize"] }
 torustiq-common = { path = "../../torustiq-common" }
 
 [lib]
