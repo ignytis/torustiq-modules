@@ -1,17 +1,18 @@
 use actix_web::{post,  web::{Bytes, Data}, App, HttpServer, Responder};
+use log::debug;
 
 use torustiq_common::ffi::types::{
     buffer::ByteBuffer,
     functions::ModuleOnDataReceivedFn,
-    module::{ModuleInitStepArgs, ModuleStepHandle, Record}};
+    module::{ModuleStepInitArgs, ModuleStepHandle, Record}};
 
-pub fn run_server(args: ModuleInitStepArgs) {
+pub fn run_server(args: ModuleStepInitArgs, host: String, port: u16) {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
 
-    match rt.block_on(async { do_spawn_server(args).await }) {
+    match rt.block_on(async { do_spawn_server(args, host, port).await }) {
         Ok(_) => {},
         Err(e) => println!("Cannot create the runtime for HTTP server: {:?}", e),
     }
@@ -39,7 +40,8 @@ async fn post_request_handler(payload: Bytes, data: Data<HttpAppData>) -> impl R
     format!("")
 }
 
-async fn do_spawn_server(args: ModuleInitStepArgs) -> std::io::Result<()> {
+async fn do_spawn_server(args: ModuleStepInitArgs, host: String, port: u16) -> std::io::Result<()> {
+    debug!("Starting server at {}:{}", &host, port);
     HttpServer::new(move|| {
         // This termination handler sends signal to the main app
         tokio::spawn(async move {
@@ -53,6 +55,6 @@ async fn do_spawn_server(args: ModuleInitStepArgs) -> std::io::Result<()> {
             }))
             .service(post_request_handler)
     })
-    .bind(("127.0.0.1", 8080)).unwrap()
+    .bind((host, port)).unwrap()
     .run().await
 }

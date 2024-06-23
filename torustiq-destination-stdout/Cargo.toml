@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.21"
+once_cell = "1.19.0"
 torustiq-common = { path = "../../torustiq-common" }
 
 [lib]

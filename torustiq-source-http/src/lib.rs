@@ -1,16 +1,23 @@
 mod http;
 
-use std::thread;
+use std::{collections::HashMap, sync::Mutex, thread};
 
 use log::debug;
 
+use once_cell::sync::Lazy;
 use torustiq_common::{
     ffi::{
-        types::module::{IoKind, ModuleInfo, ModuleInitStepArgs, ModuleProcessRecordFnResult, Record},
-        utils::strings::str_to_cchar,
+        types::{module::{
+            IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record
+        },
+        std_types::ConstCharPtr},
+        utils::strings::{cchar_to_string, str_to_cchar},
     },
     logging::init_logger};
 
+static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleStepHandle, HashMap<String, String>>>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
 
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
@@ -23,10 +30,33 @@ pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_init_step(args: ModuleInitStepArgs) {
+extern "C" fn torustiq_module_init() {
     init_logger();
     debug!("Source HTTP destination: initialized");
-    thread::spawn(|| http::run_server(args));
+}
+
+#[no_mangle]
+extern "C" fn torustiq_module_step_set_param(h: ModuleStepHandle, k: ConstCharPtr, v: ConstCharPtr) {
+    let mut module_params_container = MODULE_PARAMS.lock().unwrap();
+    if !module_params_container.contains_key(&h) {
+        module_params_container.insert(h, HashMap::new());
+    }
+    let step_cfg = module_params_container.get_mut(&h).unwrap();
+    step_cfg.insert(cchar_to_string(k), cchar_to_string(v));
+}
+
+#[no_mangle]
+extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) {
+    let module_params_container = MODULE_PARAMS.lock().unwrap();
+    let (host, port) = match module_params_container.get(&args.step_handle) {
+        Some(cfg) => (cfg.get("host"), cfg.get("port")),
+        None => (None, None),
+    };
+
+    let host = host.unwrap_or(&String::from("localhost")).clone();
+    let port = port.unwrap_or(&String::from("8080")).clone();
+    let port = port.parse::<u16>().expect(format!("Failed to parse the port number: {}", port).as_str());
+    thread::spawn(move || http::run_server(args, host, port));
 }
 
 #[no_mangle]
