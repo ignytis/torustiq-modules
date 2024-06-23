@@ -2,12 +2,12 @@ use std::{collections::HashMap, sync::Mutex};
 
 use log::debug;
 use once_cell::sync::Lazy;
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::PyBytes};
 
 use torustiq_common::{
     ffi::{
-        types::{buffer::ByteBuffer, module::{IoKind, ModuleInfo, ModuleInitStepArgs, ModuleProcessRecordFnResult, ModuleStepHandle, Record}},
-        utils::strings::{bytes_to_string_safe, str_to_cchar},
+        types::module::{IoKind, ModuleInfo, ModuleInitStepArgs, ModuleProcessRecordFnResult, ModuleStepHandle, Record},
+        utils::strings::str_to_cchar,
     },
     logging::init_logger};
 
@@ -35,9 +35,8 @@ extern "C" fn torustiq_module_init_step(args: ModuleInitStepArgs) {
 
 #[no_mangle]
 extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: ModuleStepHandle) -> ModuleProcessRecordFnResult {
-    let py_record = bytes_to_string_safe(in_record.content.bytes, in_record.content.len);
-
     let new_record = Python::with_gil(|py| {
+        let py_record = unsafe { PyBytes::bound_from_ptr(py, in_record.content.bytes, in_record.content.len) };
         let module = PyModule::from_code_bound(
             py,
             r#"
@@ -46,8 +45,8 @@ def process(record):
     result = json.loads(record)
     return "Response: " + result["test"].upper()
         "#,
-            "transform.py",
-            "transform",
+            "torustiq_module_process_record.py",
+            "torustiq_module_process_record",
         ).unwrap();
 
         let py_result: String = module.getattr("process").unwrap()
@@ -55,7 +54,7 @@ def process(record):
             .extract().unwrap();
 
         let result = Record {
-            content: ByteBuffer::from_string(py_result)
+            content: py_result.into(),
         };
 
         result
