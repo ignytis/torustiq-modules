@@ -1,20 +1,17 @@
 use std::{collections::HashMap, sync::Mutex};
 
-use log::{error, debug};
+use log::debug;
 use once_cell::sync::Lazy;
 use pyo3::{prelude::*, types::PyBytes};
 
 use torustiq_common::{
     ffi::{
-        types::{module::{IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record}, std_types::ConstCharPtr},
-        utils::strings::{cchar_to_string, str_to_cchar},
+        types::module::{IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record},
+        utils::strings::str_to_cchar,
     },
     logging::init_logger};
 
 static MODULE_INIT_ARGS: Lazy<Mutex<HashMap<ModuleStepHandle, ModuleStepInitArgs>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
-static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleStepHandle, HashMap<String, String>>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
 
@@ -37,16 +34,6 @@ extern "C" fn torustiq_module_init() {
 #[no_mangle]
 extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) {
     MODULE_INIT_ARGS.lock().unwrap().insert(args.step_handle, args);
-}
-
-#[no_mangle]
-extern "C" fn torustiq_module_step_set_param(h: ModuleStepHandle, k: ConstCharPtr, v: ConstCharPtr) {
-    let mut module_params_container = MODULE_PARAMS.lock().unwrap();
-    if !module_params_container.contains_key(&h) {
-        module_params_container.insert(h, HashMap::new());
-    }
-    let step_cfg = module_params_container.get_mut(&h).unwrap();
-    step_cfg.insert(cchar_to_string(k), cchar_to_string(v));
 }
 
 #[no_mangle]
