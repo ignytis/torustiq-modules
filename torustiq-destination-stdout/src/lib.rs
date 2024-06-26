@@ -2,17 +2,20 @@ use log::debug;
 
 use torustiq_common::{
     ffi::{
-        types::module::{
-            IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepInitArgs, Record},
-        utils::strings::{bytes_to_string_safe, str_to_cchar},
+        types::{module::{
+            IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepInitArgs, Record}, std_types::ConstCStrPtr},
+        utils::strings::bytes_to_string_safe,
     },
     logging::init_logger};
+
+const MODULE_ID: ConstCStrPtr = c"destination_stdout".as_ptr();
+const MODULE_NAME: ConstCStrPtr = c"STDOUT destination".as_ptr();
 
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
     ModuleInfo {
-        id: str_to_cchar("destination_stdout"),
-        name: str_to_cchar("STDOUT destination"),
+        id: MODULE_ID,
+        name: MODULE_NAME,
         input_kind: IoKind::Stream,
         output_kind: IoKind::External,
     }

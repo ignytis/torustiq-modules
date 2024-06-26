@@ -5,21 +5,21 @@ use once_cell::sync::Lazy;
 use pyo3::{prelude::*, types::PyBytes};
 
 use torustiq_common::{
-    ffi::{
-        types::module::{IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record},
-        utils::strings::str_to_cchar,
-    },
+    ffi::types::{module::{IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record}, std_types::ConstCStrPtr},
     logging::init_logger};
 
 static MODULE_INIT_ARGS: Lazy<Mutex<HashMap<ModuleStepHandle, ModuleStepInitArgs>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
 
+const MODULE_ID: ConstCStrPtr = c"transform_python".as_ptr();
+const MODULE_NAME: ConstCStrPtr = c"Python transformation".as_ptr();
+
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
     ModuleInfo {
-        id: str_to_cchar("transform_python"),
-        name: str_to_cchar("Python transformation"),
+        id: MODULE_ID,
+        name: MODULE_NAME,
         input_kind: IoKind::Stream,
         output_kind: IoKind::Stream,
     }

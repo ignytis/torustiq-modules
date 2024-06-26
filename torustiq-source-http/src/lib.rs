@@ -6,23 +6,23 @@ use log::debug;
 
 use once_cell::sync::Lazy;
 use torustiq_common::{
-    ffi::{
-        types::module::{
+    ffi::types::{module::{
             IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record
-        },
-        utils::strings::str_to_cchar,
-    },
+        }, std_types::ConstCStrPtr},
     logging::init_logger};
 
 static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleStepHandle, HashMap<String, String>>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
 
+const MODULE_ID: ConstCStrPtr = c"source_http".as_ptr();
+const MODULE_NAME: ConstCStrPtr = c"HTTP Source".as_ptr();
+
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
     ModuleInfo {
-        id: str_to_cchar("source_http"),
-        name: str_to_cchar("HTTP Source"),
+        id: MODULE_ID,
+        name: MODULE_NAME,
         input_kind: IoKind::External,
         output_kind: IoKind::Stream,
     }
