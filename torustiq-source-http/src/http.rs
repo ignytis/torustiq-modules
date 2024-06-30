@@ -1,10 +1,8 @@
-use actix_web::{post,  web::{Bytes, Data}, App, HttpServer, Responder};
+use actix_web::{post, web::{Bytes, Data}, App, HttpRequest, HttpServer, Responder};
 use log::debug;
 
-use torustiq_common::ffi::types::{
-    buffer::ByteBuffer,
-    functions::ModuleOnDataReceivedFn,
-    module::{ModuleStepInitArgs, ModuleStepHandle, Record}};
+use torustiq_common::ffi::{types::{
+    buffer::ByteBuffer, collections::Array, functions::ModuleOnDataReceivedFn, module::{ModuleStepHandle, ModuleStepInitArgs, Record, RecordMetadata}}, utils::strings::str_to_cchar};
 
 pub fn run_server(args: ModuleStepInitArgs, host: String, port: u16) {
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -24,17 +22,26 @@ struct HttpAppData {
 }
 
 #[post("/")]
-async fn post_request_handler(payload: Bytes, data: Data<HttpAppData>) -> impl Responder {
+async fn post_request_handler(payload: Bytes, req: HttpRequest, data: Data<HttpAppData>) -> impl Responder {
     let mut dst: Vec<u8> = Vec::with_capacity(payload.len());
     unsafe { std::ptr::copy(payload.as_ptr(), dst.as_mut_ptr(), payload.len()) };
     let bytes = dst.as_mut_ptr();
     std::mem::forget(dst);
+
+    let mut metadata: Vec<RecordMetadata> = Vec::with_capacity(req.headers().len());
+    for (k, v) in req.headers() {
+        metadata.push(RecordMetadata {
+            name: str_to_cchar(k.as_str()),
+            value: str_to_cchar(v.to_str().unwrap()),
+        });
+    }
 
     let record = Record {
         content: ByteBuffer{
             bytes,
             len: payload.len(),
         },
+        metadata: Array::from_vec(metadata),
     };
     (data.on_request_callback)(record, data.torustiq_step_handle);
     format!("")

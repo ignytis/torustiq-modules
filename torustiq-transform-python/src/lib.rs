@@ -1,8 +1,10 @@
+mod py_record;
+
 use std::{collections::HashMap, sync::Mutex};
 
 use log::debug;
 use once_cell::sync::Lazy;
-use pyo3::{prelude::*, types::PyBytes};
+use pyo3::prelude::*;
 
 use torustiq_common::{
     ffi::types::{module::{IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record}, std_types::ConstCStrPtr},
@@ -39,28 +41,28 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) {
 #[no_mangle]
 extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: ModuleStepHandle) -> ModuleProcessRecordFnResult {
     let new_record = Python::with_gil(|py| {
-        let py_record = unsafe { PyBytes::bound_from_ptr(py, in_record.content.bytes, in_record.content.len) };
+        let py_record: py_record::PyRecord = in_record.into();
         let module = PyModule::from_code_bound(
             py,
             r#"
 import json
 def process(record):
-    result = json.loads(record)
-    return "Response: " + result["test"].upper()
+    j = json.loads(bytes(record.content))
+    mtd = record.metadata
+    mtd["added_val"] = "hello2"
+    result = PyRecord(content=j["test"].upper().encode("utf-8"), metadata=mtd)
+    return result
         "#,
             "torustiq_module_process_record.py",
             "torustiq_module_process_record",
         ).unwrap();
+        module.add_class::<py_record::PyRecord>().unwrap();
 
-        let py_result: String = module.getattr("process").unwrap()
+        let out_record: py_record::PyRecord = module.getattr("process").unwrap()
             .call1((py_record,)).unwrap()
             .extract().unwrap();
 
-        let result = Record {
-            content: py_result.into(),
-        };
-
-        result
+        out_record.into()
     });
 
     let on_data_received_fn = match MODULE_INIT_ARGS.lock().unwrap().get(&step_handle) {
