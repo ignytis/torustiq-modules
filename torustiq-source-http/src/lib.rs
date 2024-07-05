@@ -7,7 +7,8 @@ use log::debug;
 use once_cell::sync::Lazy;
 use torustiq_common::{
     ffi::types::{module::{
-            IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record
+            ModuleInfo, ModuleStepInitFnResult, ModuleProcessRecordFnResult, ModuleStepHandle,
+            ModuleStepInitArgs, PipelineStepKind, Record
         }, std_types::ConstCStrPtr},
     logging::init_logger};
 
@@ -23,8 +24,6 @@ pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
     ModuleInfo {
         id: MODULE_ID,
         name: MODULE_NAME,
-        input_kind: IoKind::External,
-        output_kind: IoKind::Stream,
     }
 }
 
@@ -35,7 +34,11 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) {
+extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepInitFnResult {
+    if args.kind != PipelineStepKind::Source {
+        return ModuleStepInitFnResult::ErrorKindNotSupported;
+    }
+
     let module_params_container = MODULE_PARAMS.lock().unwrap();
     let (host, port) = match module_params_container.get(&args.step_handle) {
         Some(cfg) => (cfg.get("host"), cfg.get("port")),
@@ -46,6 +49,7 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) {
     let port = port.unwrap_or(&String::from("8080")).clone();
     let port = port.parse::<u16>().expect(format!("Failed to parse the port number: {}", port).as_str());
     thread::spawn(move || http::run_server(args, host, port));
+    ModuleStepInitFnResult::Ok
 }
 
 #[no_mangle]

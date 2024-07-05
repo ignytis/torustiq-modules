@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use pyo3::prelude::*;
 
 use torustiq_common::{
-    ffi::types::{module::{IoKind, ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, Record}, std_types::ConstCStrPtr},
+    ffi::types::{module::{ModuleInfo, ModuleStepInitFnResult, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, PipelineStepKind, Record}, std_types::ConstCStrPtr},
     logging::init_logger};
 
 static MODULE_INIT_ARGS: Lazy<Mutex<HashMap<ModuleStepHandle, ModuleStepInitArgs>>> = Lazy::new(|| {
@@ -22,8 +22,6 @@ pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
     ModuleInfo {
         id: MODULE_ID,
         name: MODULE_NAME,
-        input_kind: IoKind::Stream,
-        output_kind: IoKind::Stream,
     }
 }
 
@@ -34,8 +32,13 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) {
+extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepInitFnResult {
+    if args.kind != PipelineStepKind::Transformation {
+        return ModuleStepInitFnResult::ErrorKindNotSupported;
+    }
+
     MODULE_INIT_ARGS.lock().unwrap().insert(args.step_handle, args);
+    ModuleStepInitFnResult::Ok
 }
 
 #[no_mangle]
