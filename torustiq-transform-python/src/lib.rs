@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use pyo3::prelude::*;
 
 use torustiq_common::{
-    ffi::types::{module::{ModuleInfo, ModuleStepInitFnResult, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, PipelineStepKind, Record}, std_types::ConstCStrPtr},
+    ffi::{shared::get_param, types::{module::{ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, ModuleStepInitFnResult, PipelineStepKind, Record}, std_types::ConstCStrPtr}},
     logging::init_logger};
 
 static MODULE_INIT_ARGS: Lazy<Mutex<HashMap<ModuleStepHandle, ModuleStepInitArgs>>> = Lazy::new(|| {
@@ -43,19 +43,12 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepI
 
 #[no_mangle]
 extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: ModuleStepHandle) -> ModuleProcessRecordFnResult {
+    let code = get_param(step_handle, "code_contents").unwrap_or(String::from(""));
     let new_record = Python::with_gil(|py| {
         let py_record: py_record::PyRecord = in_record.into();
         let module: Bound<PyModule> = PyModule::from_code_bound(
             py,
-            r#"
-import json
-def process(record):
-    j = json.loads(bytes(record.content))
-    mtd = record.metadata
-    mtd["added_val"] = "hello2"
-    result = PyRecord(content=j["test"].upper().encode("utf-8"), metadata=mtd)
-    return result
-        "#,
+            &code,
             "torustiq_module_process_record.py",
             "torustiq_module_process_record",
         ).unwrap();
