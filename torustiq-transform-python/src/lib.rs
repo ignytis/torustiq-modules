@@ -45,7 +45,7 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepI
 extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: ModuleStepHandle) -> ModuleProcessRecordFnResult {
     let new_record = Python::with_gil(|py| {
         let py_record: py_record::PyRecord = in_record.into();
-        let module = PyModule::from_code_bound(
+        let module: Bound<PyModule> = PyModule::from_code_bound(
             py,
             r#"
 import json
