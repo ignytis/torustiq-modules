@@ -6,7 +6,9 @@ use std::{
 
 use log::debug;
 use once_cell::sync::Lazy;
+use py_record::PyRecord;
 use pyo3::prelude::*;
+use pyo3::wrap_pyfunction;
 
 use torustiq_common::{
     ffi::{
@@ -32,6 +34,15 @@ static MODULE_INIT_ARGS: Lazy<Mutex<HashMap<ModuleStepHandle, ModuleStepAtribute
 const MODULE_ID: ConstCStrPtr = c"transform_python".as_ptr();
 const MODULE_NAME: ConstCStrPtr = c"Python transformation".as_ptr();
 
+/// This function is callled from Python code to submit a record to the next step
+#[pyfunction]
+fn torustiq_send(record: PyRecord, step_handle: ModuleStepHandle) {
+    let on_data_received_fn = MODULE_INIT_ARGS.lock().unwrap()
+        .get(&step_handle).unwrap()
+        .init_args.on_data_received_fn;
+    on_data_received_fn(record.into(), step_handle);
+}
+
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
     ModuleInfo {
@@ -55,6 +66,7 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepI
     let (tx, rx) = channel::<Record>();
     // TODO: add a parameter to read a Python file. File is preferrable place for larger code
     let code = get_param(args.step_handle, "code_contents").unwrap_or(String::from(""));
+
     // In order not to re-initialize the Python environment on each data processing,
     // the data is received in a loop inside a thread
     thread::spawn(move|| {
@@ -65,24 +77,17 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepI
                 "torustiq_module_process_record.py",
                 "torustiq_module_process_record",
             ).unwrap();
+            // Register a PyRecord class and torustiq_send Python function
             module.add_class::<py_record::PyRecord>().unwrap();
+            module.add_function(wrap_pyfunction!(torustiq_send, &module).unwrap()).unwrap();
 
             loop {
                 let in_record: py_record::PyRecord = match rx.recv_timeout(Duration::from_secs(1)) {
                     Ok(r) => r,
                     Err(_) => continue, // timeout
                 }.into();
-
-                let out_record: py_record::PyRecord = module.getattr("process").unwrap()
-                    .call1((in_record,)).unwrap()
-                    .extract().unwrap();
-                let out_record: Record = out_record.into();
-
-                let on_data_received_fn = match MODULE_INIT_ARGS.lock().unwrap().get(&args.step_handle) {
-                    Some(m) => m.init_args.on_data_received_fn,
-                    None => return ModuleProcessRecordFnResult::None,
-                };
-                on_data_received_fn(out_record, args.step_handle);
+                module.getattr("process").unwrap()
+                    .call1((in_record, args.step_handle)).unwrap();
             }
         });
     });
