@@ -1,10 +1,10 @@
 mod py_record;
 
 use std::{
-    collections::HashMap, sync::{mpsc::{channel, Sender}, Mutex}, thread, time::Duration
+    collections::HashMap, sync::{mpsc::{channel, Receiver, Sender}, Mutex}, thread, time::Duration
 };
 
-use log::debug;
+use log::{debug, warn};
 use once_cell::sync::Lazy;
 use py_record::PyRecord;
 use pyo3::prelude::*;
@@ -37,9 +37,12 @@ const MODULE_NAME: ConstCStrPtr = c"Python transformation".as_ptr();
 /// This function is callled from Python code to submit a record to the next step
 #[pyfunction]
 fn torustiq_send(record: PyRecord, step_handle: ModuleStepHandle) {
-    let on_data_received_fn = MODULE_INIT_ARGS.lock().unwrap()
-        .get(&step_handle).unwrap()
-        .init_args.on_data_received_fn;
+    let on_data_received_fn = {
+        let l = MODULE_INIT_ARGS.lock(); // TODO:
+        l.unwrap()
+            .get(&step_handle).unwrap()
+            .init_args.on_data_received_fn
+    };
     on_data_received_fn(record.into(), step_handle);
 }
 
@@ -59,44 +62,70 @@ extern "C" fn torustiq_module_init() {
 
 #[no_mangle]
 extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepInitFnResult {
-    if args.kind != PipelineStepKind::Transformation {
-        return ModuleStepInitFnResult::ErrorKindNotSupported;
-    }
-
     let (tx, rx) = channel::<Record>();
     // TODO: add a parameter to read a Python file. File is preferrable place for larger code
     let code = get_param(args.step_handle, "code_contents").unwrap_or(String::from(""));
-
-    // In order not to re-initialize the Python environment on each data processing,
-    // the data is received in a loop inside a thread
-    thread::spawn(move|| {
-        Python::with_gil(|py| {
-            let module: Bound<PyModule> = PyModule::from_code_bound(
-                py,
-                &code,
-                "torustiq_module_process_record.py",
-                "torustiq_module_process_record",
-            ).unwrap();
-            // Register a PyRecord class and torustiq_send Python function
-            module.add_class::<py_record::PyRecord>().unwrap();
-            module.add_function(wrap_pyfunction!(torustiq_send, &module).unwrap()).unwrap();
-
-            loop {
-                let in_record: py_record::PyRecord = match rx.recv_timeout(Duration::from_secs(1)) {
-                    Ok(r) => r,
-                    Err(_) => continue, // timeout
-                }.into();
-                module.getattr("process").unwrap()
-                    .call1((in_record, args.step_handle)).unwrap();
-            }
-        });
+    let step_handle = args.step_handle;
+    let kind = args.kind.clone();
+    thread::spawn(move || {
+        match kind {
+            PipelineStepKind::Source => thread_python_env(code, thread_sender(step_handle)),
+            _ => thread_python_env(code, thread_receiver(step_handle, rx)),
+        };
     });
 
     MODULE_INIT_ARGS.lock().unwrap().insert(args.step_handle, ModuleStepAtributes {
         init_args: args,
         sender: tx,
     });
+
     ModuleStepInitFnResult::Ok
+}
+
+fn thread_sender(step_handle: ModuleStepHandle) -> impl Fn(Bound<PyModule>) {
+    let f = move |module: Bound<PyModule>| {
+        let run_fn = module.getattr("run").unwrap();
+        match run_fn.call1((step_handle,)) {
+            Ok(_) => {}, // Execution finished
+            Err(e) => warn!("Error on execution of 'run' Python function: {}", e),
+        };
+
+        (MODULE_INIT_ARGS.lock().unwrap().get(&step_handle).unwrap().init_args.termination_handler)(step_handle);
+    };
+    f
+}
+
+fn thread_receiver(step_handle: ModuleStepHandle, rx: Receiver<Record>) -> impl Fn(Bound<PyModule>) {
+    let f = move |module: Bound<PyModule>| {
+        let process_fn = module.getattr("process").unwrap();
+        loop {
+            let in_record: py_record::PyRecord = match rx.recv_timeout(Duration::from_secs(1)) {
+                Ok(r) => r,
+                Err(_) => continue, // timeout
+            }.into();
+            match process_fn.call1((in_record, step_handle)) {
+                Ok(_) => {},
+                Err(e) => warn!("Error: {}", e),
+            };
+        }
+    };
+    f
+}
+
+fn thread_python_env<F>(code: String, python_routine_fn: F) where F: Fn(Bound<PyModule>) {
+    Python::with_gil(|py| {
+        let module: Bound<PyModule> = PyModule::from_code_bound(
+            py,
+            &code,
+            "torustiq_module_process_record.py",
+            "torustiq_module_process_record",
+        ).unwrap();
+        // Register a PyRecord class and torustiq_send Python function
+        module.add_class::<py_record::PyRecord>().unwrap();
+        // Register a torustiq_send function
+        module.add_function(wrap_pyfunction!(torustiq_send, &module).unwrap()).unwrap();
+        python_routine_fn(module);
+    });
 }
 
 #[no_mangle]
