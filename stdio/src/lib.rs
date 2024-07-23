@@ -1,7 +1,18 @@
+use std::thread;
+
+use log::error;
+
 use torustiq_common::{
     ffi::{
-        shared::get_param, types::{module::{ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs, ModuleStepInitFnResult, PipelineStepKind, Record},
-        std_types::ConstCStrPtr}, utils::strings::{bytes_to_string_safe, cchar_to_string}
+        shared::get_param, types::{
+            buffer::ByteBuffer, collections::Array,
+            module::{
+                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle,
+                ModuleStepInitArgs, ModuleStepInitFnResult, PipelineStepKind, Record
+            },
+            std_types::ConstCStrPtr
+        },
+        utils::strings::{bytes_to_string_safe, cchar_to_string}
     },
     logging::init_logger};
 
@@ -24,6 +35,29 @@ extern "C" fn torustiq_module_init() {
 #[no_mangle]
 extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepInitFnResult {
     match args.kind {
+        PipelineStepKind::Source => {
+            thread::spawn(move || {
+                let stdin = std::io::stdin();
+                let mut lines = stdin.lines();
+                while let Some(line) = lines.next() {
+                    let content = match line {
+                        Ok(l) => l,
+                        Err(e) => {
+                            error!("Error on reading a line: {}", e);
+                            break
+                        },
+                    };
+                    let r = Record {
+                        content: ByteBuffer::from(content),
+                        metadata: Array::new_of_len(0),
+                    };
+                    (args.on_data_received_fn)(r, args.step_handle);
+
+                }
+                (args.termination_handler)(args.step_handle);
+            });
+            ModuleStepInitFnResult::Ok
+        },
         PipelineStepKind::Destination => ModuleStepInitFnResult::Ok,
         _ => ModuleStepInitFnResult::ErrorKindNotSupported,
     }
