@@ -62,6 +62,16 @@ extern "C" fn torustiq_module_init() {
 
 #[no_mangle]
 extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepInitFnResult {
+    // Multiple instances of module are not supported currently because of Python's GIL.
+    // There is one instance of Python environment created for process, therefore threads start
+    // to lock each other. Due to this reason only one instance of Python module is allowed.
+    {
+        let args = MODULE_INIT_ARGS.lock().unwrap();
+        if args.len() > 0 {
+            return ModuleStepInitFnResult::ErrorMultipleStepsNotSupported(*args.keys().next().unwrap());
+        }
+    }
+
     let (tx, rx) = channel::<Record>();
     // TODO: add a parameter to read a Python file. File is preferrable place for larger code
     let code = get_param(args.step_handle, "code_contents").unwrap_or(String::from(""));
