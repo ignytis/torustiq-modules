@@ -1,5 +1,5 @@
 [package]
-name = "torustiq-transform-python"
+name = "torustiq-python"
 version = "0.1.0"
 edition = "2021"
 

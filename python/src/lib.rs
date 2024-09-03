@@ -31,8 +31,8 @@ static MODULE_INIT_ARGS: Lazy<Mutex<HashMap<ModuleStepHandle, ModuleStepAtribute
     Mutex::new(HashMap::new())
 });
 
-const MODULE_ID: ConstCStrPtr = c"transform_python".as_ptr();
-const MODULE_NAME: ConstCStrPtr = c"Python transformation".as_ptr();
+const MODULE_ID: ConstCStrPtr = c"python".as_ptr();
+const MODULE_NAME: ConstCStrPtr = c"Python integration".as_ptr();
 
 /// This function is callled from Python code to submit a record to the next step
 #[pyfunction]
