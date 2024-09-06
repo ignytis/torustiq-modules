@@ -19,7 +19,8 @@ use torustiq_common::{
                 ModuleStepInitFnResult, PipelineStepKind, Record
             },
             std_types::ConstCStrPtr
-        }},
+        }
+    },
     logging::init_logger};
 
 struct ModuleStepAtributes {
@@ -115,7 +116,7 @@ fn thread_receiver(step_handle: ModuleStepHandle, rx: Receiver<Record>) -> impl 
             }.into();
             match process_fn.call1((in_record, step_handle)) {
                 Ok(_) => {},
-                Err(e) => warn!("Error: {}", e),
+                Err(e) => warn!("Error on execution of 'process' Python function: {}", e),
             };
         }
     };
@@ -145,6 +146,7 @@ extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: Mod
         Some(m) => &m.sender,
         None => return ModuleProcessRecordFnResult::None,
     };
-    sender.send(in_record).unwrap();
+    // Cloning the record because the original record will be unallocated in main app
+    sender.send(in_record.clone()).unwrap();
     ModuleProcessRecordFnResult::None
 }
