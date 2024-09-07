@@ -1,0 +1,22 @@
+[package]
+name = "torustiq-kafka"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+futures = "0.3.30"
+log = "0.4.21"
+once_cell = "1.19.0"
+torustiq-common = { path = "../../torustiq-common" }
+
+[lib]
+crate-type = ["cdylib"]
+
+[target.'cfg(unix)'.dependencies]
+rdkafka = { version = "0.36", features = ["cmake-build", "ssl", "gssapi"] }
+
+[target.'cfg(windows)'.dependencies]
+rdkafka = { version = "0.36", features = ["cmake-build", "ssl"] }
+
+[patch.crates-io]
+rdkafka = { git = "https://github.com/ignytis/rust-rdkafka.git", branch = "poll_error_callbacks" }
