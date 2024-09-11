@@ -13,7 +13,7 @@ use torustiq_common::{
     ffi::{shared::get_params, types::{
         module::{
             ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle,
-            ModuleStepInitArgs, ModuleStepInitFnResult, PipelineStepKind, Record
+            ModuleStepConfigureArgs, ModuleStepConfigureFnResult, PipelineStepKind, Record
         },
         std_types::ConstCStrPtr
     }},
@@ -44,9 +44,9 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepInitFnResult {
+extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
     if args.kind != PipelineStepKind::Destination {
-        return ModuleStepInitFnResult::ErrorKindNotSupported
+        return ModuleStepConfigureFnResult::ErrorKindNotSupported
     }
 
     let step_params = match get_params(args.step_handle) {
@@ -66,7 +66,7 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepI
 
     *PRODUCER.lock().unwrap() = Some(KafkaProducer::new(&driver_params));
     
-    ModuleStepInitFnResult::Ok
+    ModuleStepConfigureFnResult::Ok
 }
 
 #[no_mangle]

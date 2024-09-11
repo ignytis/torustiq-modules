@@ -8,7 +8,7 @@ use torustiq_common::{
             buffer::ByteBuffer, collections::Array,
             module::{
                 ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle,
-                ModuleStepInitArgs, ModuleStepInitFnResult, PipelineStepKind, Record
+                ModuleStepConfigureArgs, ModuleStepConfigureFnResult, PipelineStepKind, Record
             },
             std_types::ConstCStrPtr
         },
@@ -33,7 +33,7 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepInitFnResult {
+extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
     match args.kind {
         PipelineStepKind::Source => {
             thread::spawn(move || {
@@ -56,10 +56,10 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepI
                 }
                 (args.termination_handler)(args.step_handle);
             });
-            ModuleStepInitFnResult::Ok
+            ModuleStepConfigureFnResult::Ok
         },
-        PipelineStepKind::Destination => ModuleStepInitFnResult::Ok,
-        _ => ModuleStepInitFnResult::ErrorKindNotSupported,
+        PipelineStepKind::Destination => ModuleStepConfigureFnResult::Ok,
+        _ => ModuleStepConfigureFnResult::ErrorKindNotSupported,
     }
 }
 

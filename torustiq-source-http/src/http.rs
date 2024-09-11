@@ -2,9 +2,9 @@ use actix_web::{post, web::{Bytes, Data}, App, HttpRequest, HttpServer, Responde
 use log::debug;
 
 use torustiq_common::ffi::{types::{
-    buffer::ByteBuffer, collections::Array, functions::ModuleOnDataReceivedFn, module::{ModuleStepHandle, ModuleStepInitArgs, Record, RecordMetadata}}, utils::strings::str_to_cchar};
+    buffer::ByteBuffer, collections::Array, functions::ModuleOnDataReceivedFn, module::{ModuleStepHandle, ModuleStepConfigureArgs, Record, RecordMetadata}}, utils::strings::str_to_cchar};
 
-pub fn run_server(args: ModuleStepInitArgs, host: String, port: u16) {
+pub fn run_server(args: ModuleStepConfigureArgs, host: String, port: u16) {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -47,7 +47,7 @@ async fn post_request_handler(payload: Bytes, req: HttpRequest, data: Data<HttpA
     format!("")
 }
 
-async fn do_spawn_server(args: ModuleStepInitArgs, host: String, port: u16) -> std::io::Result<()> {
+async fn do_spawn_server(args: ModuleStepConfigureArgs, host: String, port: u16) -> std::io::Result<()> {
     debug!("Starting server at {}:{}", &host, port);
     HttpServer::new(move|| {
         // This termination handler sends signal to the main app

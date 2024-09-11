@@ -15,8 +15,8 @@ use torustiq_common::{
         shared::get_param,
         types::{
             module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepInitArgs,
-                ModuleStepInitFnResult, PipelineStepKind, Record
+                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepConfigureArgs,
+                ModuleStepConfigureFnResult, PipelineStepKind, Record
             },
             std_types::ConstCStrPtr
         }
@@ -24,7 +24,7 @@ use torustiq_common::{
     logging::init_logger};
 
 struct ModuleStepAtributes {
-    init_args: ModuleStepInitArgs,
+    init_args: ModuleStepConfigureArgs,
     sender: Sender<Record>,
 }
 
@@ -62,14 +62,14 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepInitFnResult {
+extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
     // Multiple instances of module are not supported currently because of Python's GIL.
     // There is one instance of Python environment created for process, therefore threads start
     // to lock each other. Due to this reason only one instance of Python module is allowed.
     {
         let args = MODULE_INIT_ARGS.lock().unwrap();
         if args.len() > 0 {
-            return ModuleStepInitFnResult::ErrorMultipleStepsNotSupported(*args.keys().next().unwrap());
+            return ModuleStepConfigureFnResult::ErrorMultipleStepsNotSupported(*args.keys().next().unwrap());
         }
     }
 
@@ -90,7 +90,7 @@ extern "C" fn torustiq_module_step_init(args: ModuleStepInitArgs) -> ModuleStepI
         sender: tx,
     });
 
-    ModuleStepInitFnResult::Ok
+    ModuleStepConfigureFnResult::Ok
 }
 
 fn thread_sender(step_handle: ModuleStepHandle) -> impl Fn(Bound<PyModule>) {
