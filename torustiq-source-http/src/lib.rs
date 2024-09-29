@@ -6,11 +6,22 @@ use log::debug;
 
 use once_cell::sync::Lazy;
 use torustiq_common::{
-    ffi::types::{module::{
-            ModuleInfo, ModuleStepConfigureFnResult, ModuleProcessRecordFnResult, ModuleStepHandle,
-            ModuleStepConfigureArgs, PipelineStepKind, Record
-        }, std_types::ConstCStrPtr},
-    logging::init_logger};
+    ffi::{
+        shared::{
+            get_step_configuration,
+            set_step_configuration
+        },
+        types::{
+            module::{
+                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
+            },
+            std_types::ConstCStrPtr
+        },
+        utils::strings::string_to_cchar
+    },
+    logging::init_logger
+};
 
 static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleStepHandle, HashMap<String, String>>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
@@ -39,6 +50,17 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
         return ModuleStepConfigureFnResult::ErrorKindNotSupported;
     }
 
+    set_step_configuration(args);
+    ModuleStepConfigureFnResult::Ok
+}
+
+#[no_mangle]
+extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStepStartFnResult {
+    let args = match get_step_configuration(handle) {
+        Some(a) => a,
+        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
+    };
+
     let module_params_container = MODULE_PARAMS.lock().unwrap();
     let (host, port) = match module_params_container.get(&args.step_handle) {
         Some(cfg) => (cfg.get("host"), cfg.get("port")),
@@ -49,9 +71,10 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
     let port = port.unwrap_or(&String::from("8080")).clone();
     let port = port.parse::<u16>().expect(format!("Failed to parse the port number: {}", port).as_str());
     thread::spawn(move || http::run_server(args, host, port));
-    ModuleStepConfigureFnResult::Ok
+    ModuleStepStartFnResult::Ok
 }
 
+/// Do nothing. Does modules is not supposed to process records from previous steps
 #[no_mangle]
 extern "C" fn torustiq_module_process_record(_input: Record, _h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
     ModuleProcessRecordFnResult::None

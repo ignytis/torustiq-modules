@@ -8,15 +8,20 @@ use std::{
 use log::error;
 use once_cell::sync::Lazy;
 
-
 use torustiq_common::{
-    ffi::{shared::get_params, types::{
-        module::{
-            ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle,
-            ModuleStepConfigureArgs, ModuleStepConfigureFnResult, PipelineStepKind, Record
+    ffi::{
+        shared::{
+            get_params, get_step_configuration, set_step_configuration
         },
-        std_types::ConstCStrPtr
-    }},
+        types::{
+            module::{
+                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs,
+                ModuleStepConfigureFnResult, ModuleStepHandle, ModuleStepStartFnResult,
+                PipelineStepKind, Record
+            },
+            std_types::ConstCStrPtr
+    },
+    utils::strings::string_to_cchar},
     logging::init_logger
 };
 use crate::kafka_producer::KafkaProducer;
@@ -27,8 +32,6 @@ const MODULE_NAME: ConstCStrPtr = c"Kafka output".as_ptr();
 static PRODUCER: Lazy<Mutex<Option<KafkaProducer>>> = Lazy::new(|| {
     Mutex::new(None)
 });
-
-
 
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
@@ -48,6 +51,17 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
     if args.kind != PipelineStepKind::Destination {
         return ModuleStepConfigureFnResult::ErrorKindNotSupported
     }
+    
+    set_step_configuration(args);
+    ModuleStepConfigureFnResult::Ok
+}
+
+#[no_mangle]
+extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStepStartFnResult {
+    let args = match get_step_configuration(handle) {
+        Some(a) => a,
+        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
+    };
 
     let step_params = match get_params(args.step_handle) {
         Some(p) => p,
@@ -65,8 +79,7 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
         .collect();
 
     *PRODUCER.lock().unwrap() = Some(KafkaProducer::new(&driver_params));
-    
-    ModuleStepConfigureFnResult::Ok
+    ModuleStepStartFnResult::Ok
 }
 
 #[no_mangle]
