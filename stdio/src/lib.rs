@@ -4,15 +4,16 @@ use log::error;
 
 use torustiq_common::{
     ffi::{
-        shared::get_param, types::{
+        shared::{get_param, set_step_configuration, get_step_configuration},
+        types::{
             buffer::ByteBuffer, collections::Array,
             module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle,
-                ModuleStepConfigureArgs, ModuleStepConfigureFnResult, PipelineStepKind, Record
+                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
             },
             std_types::ConstCStrPtr
         },
-        utils::strings::{bytes_to_string_safe, cchar_to_string}
+        utils::strings::{bytes_to_string_safe, cchar_to_string, string_to_cchar}
     },
     logging::init_logger};
 
@@ -35,6 +36,21 @@ extern "C" fn torustiq_module_init() {
 #[no_mangle]
 extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
     match args.kind {
+        PipelineStepKind::Source | PipelineStepKind::Destination => {},
+        _ => return ModuleStepConfigureFnResult::ErrorKindNotSupported,
+    };
+    set_step_configuration(args);
+    ModuleStepConfigureFnResult::Ok
+}
+
+#[no_mangle]
+extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStepStartFnResult {
+    let args = match get_step_configuration(handle) {
+        Some(a) => a,
+        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
+    };
+
+    match args.kind {
         PipelineStepKind::Source => {
             thread::spawn(move || {
                 let stdin = std::io::stdin();
@@ -56,10 +72,10 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
                 }
                 (args.termination_handler)(args.step_handle);
             });
-            ModuleStepConfigureFnResult::Ok
+            ModuleStepStartFnResult::Ok
         },
-        PipelineStepKind::Destination => ModuleStepConfigureFnResult::Ok,
-        _ => ModuleStepConfigureFnResult::ErrorKindNotSupported,
+        PipelineStepKind::Destination => ModuleStepStartFnResult::Ok,
+        _ => ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step '{}' must be either source or destination", handle))),
     }
 }
 

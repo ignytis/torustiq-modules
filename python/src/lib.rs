@@ -1,51 +1,43 @@
+mod py_env;
 mod py_record;
 
 use std::{
-    collections::HashMap, sync::{mpsc::{channel, Receiver, Sender}, Mutex}, thread, time::Duration
+    collections::HashMap,
+    sync::{
+        mpsc::{
+            channel, Receiver, Sender
+        },
+        Mutex
+    },
+    thread,
 };
 
-use log::{debug, warn};
+use log::debug;
 use once_cell::sync::Lazy;
-use py_record::PyRecord;
-use pyo3::prelude::*;
-use pyo3::wrap_pyfunction;
 
+use py_env::{thread_python_env, thread_receiver, thread_sender};
 use torustiq_common::{
     ffi::{
-        shared::get_param,
+        shared::{get_param, get_step_configuration, set_step_configuration},
         types::{
             module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepHandle, ModuleStepConfigureArgs,
-                ModuleStepConfigureFnResult, PipelineStepKind, Record
+                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
             },
             std_types::ConstCStrPtr
-        }
+        }, utils::strings::string_to_cchar
     },
     logging::init_logger};
 
-struct ModuleStepAtributes {
-    init_args: ModuleStepConfigureArgs,
-    sender: Sender<Record>,
-}
-
-static MODULE_INIT_ARGS: Lazy<Mutex<HashMap<ModuleStepHandle, ModuleStepAtributes>>> = Lazy::new(|| {
+static SENDERS: Lazy<Mutex<HashMap<ModuleStepHandle, Sender<Record>>>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
+static RECEIVERS: Lazy<Mutex<HashMap<ModuleStepHandle, Receiver<Record>>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
 
 const MODULE_ID: ConstCStrPtr = c"python".as_ptr();
 const MODULE_NAME: ConstCStrPtr = c"Python integration".as_ptr();
-
-/// This function is callled from Python code to submit a record to the next step
-#[pyfunction]
-fn torustiq_send(record: PyRecord, step_handle: ModuleStepHandle) {
-    let on_data_received_fn = {
-        let l = MODULE_INIT_ARGS.lock(); // TODO:
-        l.unwrap()
-            .get(&step_handle).unwrap()
-            .init_args.on_data_received_fn
-    };
-    on_data_received_fn(record.into(), step_handle);
-}
 
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
@@ -62,88 +54,52 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
+extern "C" fn torustiq_module_step_configure(step_config: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
     // Multiple instances of module are not supported currently because of Python's GIL.
     // There is one instance of Python environment created for process, therefore threads start
     // to lock each other. Due to this reason only one instance of Python module is allowed.
-    {
-        let args = MODULE_INIT_ARGS.lock().unwrap();
-        if args.len() > 0 {
-            return ModuleStepConfigureFnResult::ErrorMultipleStepsNotSupported(*args.keys().next().unwrap());
-        }
+    let mut senders = SENDERS.lock().unwrap();
+    if senders.len() > 0 {
+        return ModuleStepConfigureFnResult::ErrorMultipleStepsNotSupported(*senders.keys().next().unwrap());
     }
-
-    let (tx, rx) = channel::<Record>();
-    // TODO: add a parameter to read a Python file. File is preferrable place for larger code
-    let code = get_param(args.step_handle, "code_contents").unwrap_or(String::from(""));
-    let step_handle = args.step_handle;
-    let kind = args.kind.clone();
-    thread::spawn(move || {
-        match kind {
-            PipelineStepKind::Source => thread_python_env(code, thread_sender(step_handle)),
-            _ => thread_python_env(code, thread_receiver(step_handle, rx)),
-        };
-    });
-
-    MODULE_INIT_ARGS.lock().unwrap().insert(args.step_handle, ModuleStepAtributes {
-        init_args: args,
-        sender: tx,
-    });
+    let (sender, receiver) = channel::<Record>();
+    RECEIVERS.lock().unwrap().insert(step_config.step_handle, receiver);
+    senders.insert(step_config.step_handle, sender);
+    set_step_configuration(step_config);
 
     ModuleStepConfigureFnResult::Ok
 }
 
-fn thread_sender(step_handle: ModuleStepHandle) -> impl Fn(Bound<PyModule>) {
-    let f = move |module: Bound<PyModule>| {
-        let run_fn = module.getattr("run").unwrap();
-        match run_fn.call1((step_handle,)) {
-            Ok(_) => {}, // Execution finished
-            Err(e) => warn!("Error on execution of 'run' Python function: {}", e),
+#[no_mangle]
+extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStepStartFnResult {
+    let step_config = match get_step_configuration(handle) {
+        Some(c) => c,
+        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step '{}' has no registered configuration", handle))),
+    };
+    let receiver = match RECEIVERS.lock().unwrap().remove(&handle) {
+        Some(r) => r,
+        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step  '{}' has no registered receiver", handle))),
+    };
+    // TODO: add a parameter to read a Python file. File is preferrable place for larger code
+    let code = get_param(step_config.step_handle, "code_contents").unwrap_or(String::from(""));
+    let step_handle = step_config.step_handle;
+    let kind = step_config.kind.clone();
+    thread::spawn(move || {
+        match kind {
+            PipelineStepKind::Source => thread_python_env(code, thread_sender(step_handle)),
+            _ => thread_python_env(code, thread_receiver(step_handle, receiver)),
         };
-
-        (MODULE_INIT_ARGS.lock().unwrap().get(&step_handle).unwrap().init_args.termination_handler)(step_handle);
-    };
-    f
-}
-
-fn thread_receiver(step_handle: ModuleStepHandle, rx: Receiver<Record>) -> impl Fn(Bound<PyModule>) {
-    let f = move |module: Bound<PyModule>| {
-        let process_fn = module.getattr("process").unwrap();
-        loop {
-            let in_record: py_record::PyRecord = match rx.recv_timeout(Duration::from_secs(1)) {
-                Ok(r) => r,
-                Err(_) => continue, // timeout
-            }.into();
-            match process_fn.call1((in_record, step_handle)) {
-                Ok(_) => {},
-                Err(e) => warn!("Error on execution of 'process' Python function: {}", e),
-            };
-        }
-    };
-    f
-}
-
-fn thread_python_env<F>(code: String, python_routine_fn: F) where F: Fn(Bound<PyModule>) {
-    Python::with_gil(|py| {
-        let module: Bound<PyModule> = PyModule::from_code_bound(
-            py,
-            &code,
-            "torustiq_module_process_record.py",
-            "torustiq_module_process_record",
-        ).unwrap();
-        // Register a PyRecord class and torustiq_send Python function
-        module.add_class::<py_record::PyRecord>().unwrap();
-        // Register a torustiq_send function
-        module.add_function(wrap_pyfunction!(torustiq_send, &module).unwrap()).unwrap();
-        python_routine_fn(module);
     });
+
+    ModuleStepStartFnResult::Ok
 }
 
+/// This function forwards a record received from the previous step into Python environment (see the thread_receiver function)
 #[no_mangle]
 extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: ModuleStepHandle) -> ModuleProcessRecordFnResult {
-    let mutex = MODULE_INIT_ARGS.lock().unwrap();
+    let mutex = SENDERS.lock().unwrap();
     let sender = match mutex.get(&step_handle) {
-        Some(m) => &m.sender,
+        Some(s) => s,
         None => return ModuleProcessRecordFnResult::None,
     };
     // Cloning the record because the original record will be unallocated in main app
