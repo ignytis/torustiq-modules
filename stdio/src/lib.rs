@@ -1,6 +1,6 @@
 use std::thread;
 
-use log::error;
+use log::{debug, error};
 
 use torustiq_common::{
     ffi::{
@@ -68,9 +68,9 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
                         metadata: Array::new_of_len(0),
                     };
                     (args.on_data_received_fn)(r, args.step_handle);
-
                 }
-                (args.termination_handler)(args.step_handle);
+                debug!("End of stdin is reached. Terminating the stdin source...");
+                (args.on_step_terminate_cb)(args.step_handle);
             });
             ModuleStepStartFnResult::Ok
         },

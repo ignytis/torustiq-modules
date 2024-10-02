@@ -53,7 +53,7 @@ async fn do_spawn_server(args: ModuleStepConfigureArgs, host: String, port: u16)
         // This termination handler sends signal to the main app
         tokio::spawn(async move {
             tokio::signal::ctrl_c().await.unwrap();
-            (args.termination_handler)(args.step_handle)
+            (args.on_step_terminate_cb)(args.step_handle)
         });
         App::new()
             .app_data(Data::new(HttpAppData {

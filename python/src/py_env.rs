@@ -37,14 +37,14 @@ pub fn thread_sender(step_handle: ModuleStepHandle) -> impl Fn(Bound<PyModule>) 
             Err(e) => warn!("Error on execution of 'run' Python function: {}", e),
         };
 
-        let termination_handler = match get_step_configuration(step_handle) {
-            Some(cfg) => cfg.termination_handler,
+        let on_step_terminate_cb = match get_step_configuration(step_handle) {
+            Some(cfg) => cfg.on_step_terminate_cb,
             None => {
                 error!("Failed to load the step configuration for step '{}' in Python sender thread", step_handle);
                 return;
             }
         };
-        termination_handler(step_handle);
+        on_step_terminate_cb(step_handle);
     };
     f
 }
