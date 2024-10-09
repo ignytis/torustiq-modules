@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use pyo3::prelude::*;
 
 use torustiq_common::
-    ffi::{types::{buffer::ByteBuffer, collections::Array, module::{Record, RecordMetadata}}, utils::strings::cchar_to_string};
+    ffi::{types::module::{Record, RecordMetadata}, utils::strings::cchar_to_string};
 
 
 /// A Python representation of Record object
@@ -53,11 +53,6 @@ impl From<Record> for PyRecord {
 
 impl Into<Record> for PyRecord {
     fn into(self) -> Record {
-        let metadata_vec: Vec<RecordMetadata> = self.metadata.into_iter()
-            .map(|kv| kv.into()).collect();
-        Record {
-            content: ByteBuffer::from(self.content),
-            metadata: Array::from_vec(metadata_vec),
-        }   
+        Record::from_std_types(self.content, self.metadata)
     }
 }

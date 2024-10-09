@@ -1,0 +1,12 @@
+[package]
+name = "torustiq-lua"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.21"
+mlua = { version = "0.9.9", features = ["lua54", "vendored"] }
+torustiq-common = { path = "../../torustiq-common" }
+
+[lib]
+crate-type = ["cdylib"]
