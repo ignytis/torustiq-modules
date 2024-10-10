@@ -1,9 +1,10 @@
 mod lua_env;
 
-use std::thread;
+use std::{collections::HashMap, sync::{mpsc::{channel, Receiver, Sender}, Mutex}, thread};
 
 use log::error;
 use lua_env::LuaEnv;
+use once_cell::sync::Lazy;
 
 use torustiq_common::{
     ffi::{
@@ -15,12 +16,19 @@ use torustiq_common::{
             },
             std_types::ConstCStrPtr
         },
-        utils::strings::{bytes_to_string_safe, cchar_to_string, string_to_cchar}
+        utils::strings::string_to_cchar
     },
     logging::init_logger};
 
 const MODULE_ID: ConstCStrPtr = c"lua".as_ptr();
 const MODULE_NAME: ConstCStrPtr = c"Lua".as_ptr();
+
+static SENDERS: Lazy<Mutex<HashMap<ModuleStepHandle, Sender<Record>>>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
+static RECEIVERS: Lazy<Mutex<HashMap<ModuleStepHandle, Receiver<Record>>>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
 
 
 #[no_mangle]
@@ -37,11 +45,12 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
-    match args.kind {
-        PipelineStepKind::Source => {},
-        _ => return ModuleStepConfigureFnResult::ErrorKindNotSupported,
-    };
+extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {    
+    let mut senders = SENDERS.lock().unwrap();
+    let (sender, receiver) = channel::<Record>();
+    RECEIVERS.lock().unwrap().insert(args.step_handle, receiver);
+    senders.insert(args.step_handle, sender);
+
     set_step_configuration(args);
     ModuleStepConfigureFnResult::Ok
 }
@@ -82,20 +91,13 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_process_record(input: Record, h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
-    let content = bytes_to_string_safe(input.content.bytes, input.content.len);
-    let mtd_len = input.metadata.len as usize;
-    let metadata = unsafe { Vec::from_raw_parts(input.metadata.data, mtd_len, mtd_len) }
-        .into_iter()
-        .map(|metadata_record| vec![cchar_to_string(metadata_record.name), cchar_to_string(metadata_record.value)].join(" = "))
-        .collect::<Vec<String>>()
-        .join(", ");
-
-    let out_str = get_param(h, "format")
-        .unwrap_or(String::from("%R"))
-        .replace("%R", content.as_str())
-        .replace("%M", metadata.as_str());
-
-    println!("{}", out_str);
+extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: ModuleStepHandle) -> ModuleProcessRecordFnResult {
+    let mutex = SENDERS.lock().unwrap();
+    let sender = match mutex.get(&step_handle) {
+        Some(s) => s,
+        None => return ModuleProcessRecordFnResult::None,
+    };
+    // Cloning the record because the original record will be unallocated in main app
+    sender.send(in_record.clone()).unwrap();
     ModuleProcessRecordFnResult::None
 }
