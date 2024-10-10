@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use log::error;
-use mlua::Lua;
+use mlua::{Chunk, Function, Lua};
 
 use torustiq_common::ffi::{
     shared::get_step_configuration,
-    types::module::{ModuleStepHandle, Record},
+    types::module::{ModuleStepHandle, Record, RecordMetadata}, utils::strings::cchar_to_string,
 };
 
 fn torustiq_send(record: Record, step_handle: ModuleStepHandle) {
@@ -56,4 +56,26 @@ impl LuaEnv {
             Err(e) => Err(format!("An error occurred in Lua code: {}", e)),
         }
     }
+
+    pub fn create_function_from_code<S: Into<String>>(&self, code: S) -> Result<Function<'_>, String> {
+        match self.lua.load(code.into()).eval() {
+            Ok(f) => Ok(f),
+            Err(e) => Err(format!("Failed to create a function from Lua code: {}", e)),
+        }
+    }
+    
+    pub fn call_process_record_function(&self, func: &Function<'_>, step_handle: ModuleStepHandle, record: Record) -> Result<(), String> {
+        // TODO: it's a copypaste from Python modile. Need to have a common method?
+        let mtd_len = record.metadata.len as usize;
+        let metadata: Vec<RecordMetadata> = unsafe { Vec::from_raw_parts(record.metadata.data, mtd_len, mtd_len) };
+        let metadata: HashMap<String, String> = metadata.into_iter()
+            .map(|record| (cchar_to_string(record.name), cchar_to_string(record.value)))
+            .collect();
+
+        match func.call::<_, String>((step_handle, record.content.to_string(), metadata)) {
+            Ok(a) => Ok(()),
+            Err(e) => Err(format!("Function call failure: {}", e))
+        }
+    }
+
 }

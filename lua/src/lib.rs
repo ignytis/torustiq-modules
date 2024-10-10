@@ -1,6 +1,6 @@
 mod lua_env;
 
-use std::{collections::HashMap, sync::{mpsc::{channel, Receiver, Sender}, Mutex}, thread};
+use std::{collections::HashMap, sync::{mpsc::{channel, Receiver, Sender}, Mutex}, thread, time::Duration};
 
 use log::error;
 use lua_env::LuaEnv;
@@ -62,6 +62,8 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
         None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
+    // TODO: implement loading from file
+    let code = get_param(handle, "code_contents").unwrap_or(String::from(""));
     match args.kind {
         PipelineStepKind::Source => {
             thread::spawn(move || {
@@ -74,20 +76,60 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
                     },
                 };
 
-                // TODO: implement loading from file
-                let code = get_param(handle, "code_contents").unwrap_or(String::from(""));
                 // Launcher codes: looks up the 'run(step_handle)' Lua function
                 let code = format!("{}\nrun({})", code, handle);
                 match lua.exec_code(code) {
                     Ok(_) => {},
-                    Err(e) => error!("An error occurred in Lua code: {}", e)
+                    Err(e) => error!("An error occurred in Lua sender code: {}", e)
                 };
                 (args.on_step_terminate_cb)(args.step_handle);
             });
-            ModuleStepStartFnResult::Ok
+            
         },
-        _ => ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step '{}' must be source", handle))),
-    }
+        _ => {
+            thread::spawn(move || {
+                let lua = match LuaEnv::try_new() {
+                    Ok(l) => l,
+                    Err(e) => {
+                        error!("Failed to create a Lua env in step '{}': {}", handle, e);
+                        (args.on_step_terminate_cb)(args.step_handle);
+                        return
+                    },
+                };
+
+                let rx = match RECEIVERS.lock().unwrap().remove(&handle) {
+                    Some(r) => r,
+                    None => {
+                        error!("Record receiver is not registered for step '{}'", handle);
+                        (args.on_step_terminate_cb)(args.step_handle);
+                        return
+                    }
+                };
+
+                let process_func = match lua.create_function_from_code(code) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        error!("Failed to create a Lua function in step '{}': {}", handle, e);
+                        (args.on_step_terminate_cb)(args.step_handle);
+                        return
+                    },
+                };
+
+                loop {
+                    let in_record: Record = match rx.recv_timeout(Duration::from_secs(1)) {
+                        Ok(r) => r,
+                        Err(_) => continue, // timeout
+                    }.into();
+                    
+                    match lua.call_process_record_function(&process_func, handle, in_record) {
+                        Ok(_) => {},
+                        Err(e) => error!("ERROR: {}", e),
+                    };
+                }
+            });
+        },
+    };
+    ModuleStepStartFnResult::Ok
 }
 
 #[no_mangle]
