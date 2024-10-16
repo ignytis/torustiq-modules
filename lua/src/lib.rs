@@ -1,6 +1,6 @@
 mod lua_env;
 
-use std::{collections::HashMap, sync::{mpsc::{channel, Receiver, Sender}, Mutex}, thread, time::Duration};
+use std::{collections::HashMap, fs, sync::{mpsc::{channel, Receiver, Sender}, Mutex}, thread, time::Duration};
 
 use log::error;
 use lua_env::LuaEnv;
@@ -62,8 +62,20 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
         None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
-    // TODO: implement loading from file
-    let code = get_param(handle, "code_contents").unwrap_or(String::from(""));
+    let code = match get_param(handle, "file") {
+        Some(f) => {
+            match fs::read_to_string(f.clone()) {
+                Ok(c) => c,
+                Err(e) => return ModuleStepStartFnResult::ErrorMisc(
+                    string_to_cchar(format!("Failed to read contents of Lua file '{}': {}", f, e)))
+            }
+        },
+        None => match get_param(handle, "code_contents") {
+            Some(c) => c,
+            None => return ModuleStepStartFnResult::ErrorMisc(
+                string_to_cchar("Either 'file' or 'code_contents' attribute must be provided for Lua handler")),
+        }
+    };
     match args.kind {
         PipelineStepKind::Source => {
             thread::spawn(move || {

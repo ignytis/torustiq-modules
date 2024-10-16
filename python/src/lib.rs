@@ -3,13 +3,14 @@ mod py_record;
 
 use std::{
     collections::HashMap,
+    fs,
     sync::{
         mpsc::{
             channel, Receiver, Sender
         },
         Mutex
     },
-    thread,
+    thread
 };
 
 use log::debug;
@@ -80,8 +81,20 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
         Some(r) => r,
         None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step  '{}' has no registered receiver", handle))),
     };
-    // TODO: add a parameter to read a Python file. File is preferrable place for larger code
-    let code = get_param(step_config.step_handle, "code_contents").unwrap_or(String::from(""));
+    let code = match get_param(step_config.step_handle, "file") {
+        Some(f) => {
+            match fs::read_to_string(f.clone()) {
+                Ok(c) => c,
+                Err(e) => return ModuleStepStartFnResult::ErrorMisc(
+                    string_to_cchar(format!("Failed to read contents of Python file '{}': {}", f, e)))
+            }
+        },
+        None => match get_param(step_config.step_handle, "code_contents") {
+            Some(c) => c,
+            None => return ModuleStepStartFnResult::ErrorMisc(
+                string_to_cchar("Either 'file' or 'code_contents' attribute must be provided for Python handler")),
+        }
+    };
     let step_handle = step_config.step_handle;
     let kind = step_config.kind.clone();
     thread::spawn(move || {
