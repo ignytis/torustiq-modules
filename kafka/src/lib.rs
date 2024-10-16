@@ -89,7 +89,7 @@ extern "C" fn torustiq_module_process_record(input: Record, _h: ModuleStepHandle
         Some(p) => p,
         None => {
             error!("Cannot send a message to Kafka: producer is offline");
-            return ModuleProcessRecordFnResult::None
+            return ModuleProcessRecordFnResult::Ok
         }
     };
     // TODO:
@@ -100,5 +100,5 @@ extern "C" fn torustiq_module_process_record(input: Record, _h: ModuleStepHandle
         Err(e) => print!("Failed to send a message to Kafka: {}", e),
         _ => {},
     }
-    ModuleProcessRecordFnResult::None
+    ModuleProcessRecordFnResult::Ok
 }

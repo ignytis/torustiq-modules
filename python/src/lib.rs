@@ -100,9 +100,9 @@ extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: Mod
     let mutex = SENDERS.lock().unwrap();
     let sender = match mutex.get(&step_handle) {
         Some(s) => s,
-        None => return ModuleProcessRecordFnResult::None,
+        None => return ModuleProcessRecordFnResult::Ok,
     };
     // Cloning the record because the original record will be unallocated in main app
     sender.send(in_record.clone()).unwrap();
-    ModuleProcessRecordFnResult::None
+    ModuleProcessRecordFnResult::Ok
 }

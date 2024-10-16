@@ -95,5 +95,5 @@ extern "C" fn torustiq_module_process_record(input: Record, h: ModuleStepHandle)
         .replace("%M", metadata.as_str());
 
     println!("{}", out_str);
-    ModuleProcessRecordFnResult::None
+    ModuleProcessRecordFnResult::Ok
 }
