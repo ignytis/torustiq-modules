@@ -5,6 +5,7 @@ use std::{
     sync::Mutex
 };
 
+use kafka_producer::KafkaMessage;
 use log::error;
 use once_cell::sync::Lazy;
 
@@ -84,7 +85,6 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
 
 #[no_mangle]
 extern "C" fn torustiq_module_process_record(input: Record, _h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
-    let bytes = input.content.to_byte_vec();
     let producer = match PRODUCER.lock().unwrap().clone() {
         Some(p) => p,
         None => {
@@ -93,10 +93,23 @@ extern "C" fn torustiq_module_process_record(input: Record, _h: ModuleStepHandle
         }
     };
     // TODO:
-    // 1. Topic name - fetch from metadata
-    // 2. Kafka key - fetch from metadata
-    // 3. Pass headers from metadata
-    match futures::executor::block_on(producer.produce("test", &None, bytes)) {
+    // Instead of blocking, process a message using channel
+    // Consider moving the torustiq_module_process_record function into common module, so all modules are expected
+    //   to process records in async mode (using channels)
+    let mtd = input.get_metadata_as_hashmap();
+    let headers: HashMap<String, String> = mtd
+        .iter()
+        .filter(|(k, _)| k.starts_with("kafka.headers."))
+        .map(|(k, v)| (k.strip_prefix("kafka.headers.").unwrap().to_string(), v.clone()))
+        .collect();
+    let key = mtd.get("kafka.key").cloned();
+    let topic = mtd.get("kafka.topic").unwrap_or(&String::from("test")).clone(); // TODO: handle the missing topic
+    match futures::executor::block_on(producer.produce(&KafkaMessage {
+        headers,
+        key,
+        payload: input.content.to_byte_vec(),
+        topic,
+    })) {
         Err(e) => print!("Failed to send a message to Kafka: {}", e),
         _ => {},
     }

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use log::{error, info};
 use rdkafka::config::ClientConfig;
+use rdkafka::message::{Header, OwnedHeaders};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 
 
@@ -17,6 +18,12 @@ pub struct KafkaProducer {
     rd_producer: FutureProducer,
 }
 
+pub struct KafkaMessage {
+    pub topic: String,
+    pub key: Option<String>,
+    pub headers: HashMap<String, String>,
+    pub payload: Vec<u8>,
+}
 
 impl KafkaProducer {
     pub fn new(cfg: &HashMap<String, String>) -> Self {
@@ -38,13 +45,23 @@ impl KafkaProducer {
 
     // On success returns a tuple (partition, offset)
     // On failure returns an error message
-    pub async fn produce(&self, topic_name: &str, key: &Option<String>, payload: Vec<u8>) -> Result<(i32, i64), String> {
-        let p = &payload.to_vec();
-        let mut future_record = FutureRecord::to(topic_name).payload(p);
-        future_record = match key {
+    pub async fn produce(&self, msg: &KafkaMessage) -> Result<(i32, i64), String> {
+        let p = &msg.payload.to_vec();
+
+        let mut headers = OwnedHeaders::new_with_capacity(msg.headers.len());
+        for (key, value) in &msg.headers {
+            headers = headers.insert(Header{key, value: Some(value)});
+        }
+
+        // Init a message with payload
+        let mut future_record: FutureRecord<'_, String, Vec<u8>> = FutureRecord::to(&msg.topic)
+            .payload(p)
+            .headers(headers);
+        future_record = match &msg.key {
             Some(k) => future_record.key(k),
             None => future_record,
         };
+
 
         let res = match self.rd_producer.send_result(future_record) {
             Ok(o) => o,
