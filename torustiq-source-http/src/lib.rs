@@ -74,7 +74,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
     ModuleStepStartFnResult::Ok
 }
 
-/// Do nothing. Does modules is not supposed to process records from previous steps
+/// Do nothing. The module is not supposed to process records from previous steps
 #[no_mangle]
 extern "C" fn torustiq_module_process_record(_input: Record, _h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
     ModuleProcessRecordFnResult::Ok

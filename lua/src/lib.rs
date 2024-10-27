@@ -1,34 +1,28 @@
 mod lua_env;
 
-use std::{collections::HashMap, fs, sync::{mpsc::{channel, Receiver, Sender}, Mutex}, thread, time::Duration};
+use std::{fs, sync::mpsc::channel, thread, time::Duration};
 
 use log::error;
 use lua_env::LuaEnv;
-use once_cell::sync::Lazy;
 
 use torustiq_common::{
     ffi::{
-        shared::{get_param, set_step_configuration, get_step_configuration},
+        shared::{get_param, get_step_configuration, set_step_configuration},
         types::{
             module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+                ModuleInfo, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
                 ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
             },
             std_types::ConstCStrPtr
         },
         utils::strings::string_to_cchar
     },
-    logging::init_logger};
+    logging::init_logger,
+    pipeline::async_process
+};
 
 const MODULE_ID: ConstCStrPtr = c"lua".as_ptr();
 const MODULE_NAME: ConstCStrPtr = c"Lua".as_ptr();
-
-static SENDERS: Lazy<Mutex<HashMap<ModuleStepHandle, Sender<Record>>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
-static RECEIVERS: Lazy<Mutex<HashMap<ModuleStepHandle, Receiver<Record>>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
 
 
 #[no_mangle]
@@ -46,9 +40,9 @@ extern "C" fn torustiq_module_init() {
 
 #[no_mangle]
 extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {    
-    let mut senders = SENDERS.lock().unwrap();
+    let mut senders = async_process::RECORD_SENDERS.lock().unwrap();
     let (sender, receiver) = channel::<Record>();
-    RECEIVERS.lock().unwrap().insert(args.step_handle, receiver);
+    async_process::add_receiver(args.step_handle, receiver);
     senders.insert(args.step_handle, sender);
 
     set_step_configuration(args);
@@ -109,7 +103,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
                     },
                 };
 
-                let rx = match RECEIVERS.lock().unwrap().remove(&handle) {
+                let rx = match async_process::get_receiver_owned(handle) {
                     Some(r) => r,
                     None => {
                         error!("Record receiver is not registered for step '{}'", handle);
@@ -142,16 +136,4 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
         },
     };
     ModuleStepStartFnResult::Ok
-}
-
-#[no_mangle]
-extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: ModuleStepHandle) -> ModuleProcessRecordFnResult {
-    let mutex = SENDERS.lock().unwrap();
-    let sender = match mutex.get(&step_handle) {
-        Some(s) => s,
-        None => return ModuleProcessRecordFnResult::Ok,
-    };
-    // Cloning the record because the original record will be unallocated in main app
-    sender.send(in_record.clone()).unwrap();
-    ModuleProcessRecordFnResult::Ok
 }

@@ -2,19 +2,12 @@ mod py_env;
 mod py_record;
 
 use std::{
-    collections::HashMap,
     fs,
-    sync::{
-        mpsc::{
-            channel, Receiver, Sender
-        },
-        Mutex
-    },
+    sync::mpsc::channel,
     thread
 };
 
 use log::debug;
-use once_cell::sync::Lazy;
 
 use py_env::{thread_python_env, thread_receiver, thread_sender};
 use torustiq_common::{
@@ -22,20 +15,15 @@ use torustiq_common::{
         shared::{get_param, get_step_configuration, set_step_configuration},
         types::{
             module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+                ModuleInfo, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
                 ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
             },
-            std_types::ConstCStrPtr
+            std_types::ConstCStrPtr,
         }, utils::strings::string_to_cchar
     },
-    logging::init_logger};
-
-static SENDERS: Lazy<Mutex<HashMap<ModuleStepHandle, Sender<Record>>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
-static RECEIVERS: Lazy<Mutex<HashMap<ModuleStepHandle, Receiver<Record>>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
+    logging::init_logger,
+    pipeline::async_process,
+};
 
 const MODULE_ID: ConstCStrPtr = c"python".as_ptr();
 const MODULE_NAME: ConstCStrPtr = c"Python integration".as_ptr();
@@ -59,12 +47,12 @@ extern "C" fn torustiq_module_step_configure(step_config: ModuleStepConfigureArg
     // Multiple instances of module are not supported currently because of Python's GIL.
     // There is one instance of Python environment created for process, therefore threads start
     // to lock each other. Due to this reason only one instance of Python module is allowed.
-    let mut senders = SENDERS.lock().unwrap();
+    let mut senders = async_process::RECORD_SENDERS.lock().unwrap();
     if senders.len() > 0 {
         return ModuleStepConfigureFnResult::ErrorMultipleStepsNotSupported(*senders.keys().next().unwrap());
     }
     let (sender, receiver) = channel::<Record>();
-    RECEIVERS.lock().unwrap().insert(step_config.step_handle, receiver);
+    async_process::add_receiver(step_config.step_handle, receiver);
     senders.insert(step_config.step_handle, sender);
     set_step_configuration(step_config);
 
@@ -77,7 +65,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
         Some(c) => c,
         None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step '{}' has no registered configuration", handle))),
     };
-    let receiver = match RECEIVERS.lock().unwrap().remove(&handle) {
+    let receiver = match async_process::get_receiver_owned(handle) {
         Some(r) => r,
         None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step  '{}' has no registered receiver", handle))),
     };
@@ -105,17 +93,4 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
     });
 
     ModuleStepStartFnResult::Ok
-}
-
-/// This function forwards a record received from the previous step into Python environment (see the thread_receiver function)
-#[no_mangle]
-extern "C" fn torustiq_module_process_record(in_record: Record, step_handle: ModuleStepHandle) -> ModuleProcessRecordFnResult {
-    let mutex = SENDERS.lock().unwrap();
-    let sender = match mutex.get(&step_handle) {
-        Some(s) => s,
-        None => return ModuleProcessRecordFnResult::Ok,
-    };
-    // Cloning the record because the original record will be unallocated in main app
-    sender.send(in_record.clone()).unwrap();
-    ModuleProcessRecordFnResult::Ok
 }
