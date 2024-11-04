@@ -1,13 +1,7 @@
 mod py_env;
 mod py_record;
 
-use std::{
-    fs,
-    sync::mpsc::channel,
-    thread
-};
-
-use log::debug;
+use std::{fs, thread};
 
 use py_env::{thread_python_env, thread_receiver, thread_sender};
 use torustiq_common::{
@@ -16,7 +10,7 @@ use torustiq_common::{
         types::{
             module::{
                 ModuleInfo, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
-                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
+                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind,
             },
             std_types::ConstCStrPtr,
         }, utils::strings::string_to_cchar
@@ -39,7 +33,6 @@ pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
 #[no_mangle]
 extern "C" fn torustiq_module_init() {
     init_logger();
-    debug!("Python transform: initialized");
 }
 
 #[no_mangle]
@@ -47,15 +40,15 @@ extern "C" fn torustiq_module_step_configure(step_config: ModuleStepConfigureArg
     // Multiple instances of module are not supported currently because of Python's GIL.
     // There is one instance of Python environment created for process, therefore threads start
     // to lock each other. Due to this reason only one instance of Python module is allowed.
-    let mut senders = async_process::RECORD_SENDERS.lock().unwrap();
-    if senders.len() > 0 {
-        return ModuleStepConfigureFnResult::ErrorMultipleStepsNotSupported(*senders.keys().next().unwrap());
+    {
+        let senders = async_process::RECORD_SENDERS.lock().unwrap();
+        if senders.len() > 0 {
+            return ModuleStepConfigureFnResult::ErrorMultipleStepsNotSupported(*senders.keys().next().unwrap());
+        }
     }
-    let (sender, receiver) = channel::<Record>();
-    async_process::add_receiver(step_config.step_handle, receiver);
-    senders.insert(step_config.step_handle, sender);
-    set_step_configuration(step_config);
 
+    async_process::create_sender_and_receiver(step_config.step_handle);
+    set_step_configuration(step_config);
     ModuleStepConfigureFnResult::Ok
 }
 

@@ -19,7 +19,7 @@ pub struct PyRecord {
 #[pymethods]
 impl PyRecord {
     #[new]
-    #[pyo3(text_signature = "(content, metadata)")]
+    #[pyo3(signature = (content, metadata=None))]
     fn new(content: Vec<u8>, metadata: Option<HashMap<String, String>>) -> Self {
         let metadata = match metadata {
             Some(m) => m,

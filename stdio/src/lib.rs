@@ -1,21 +1,21 @@
-use std::thread;
+use std::{thread, time::Duration};
 
 use log::{debug, error};
 
 use torustiq_common::{
     ffi::{
-        shared::{get_param, set_step_configuration, get_step_configuration},
+        shared::{get_param, get_step_configuration, set_step_configuration},
         types::{
             buffer::ByteBuffer, collections::Array,
             module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+                ModuleInfo, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
                 ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
             },
             std_types::ConstCStrPtr
         },
         utils::strings::{bytes_to_string_safe, cchar_to_string, string_to_cchar}
     },
-    logging::init_logger};
+    logging::init_logger, pipeline::async_process};
 
 const MODULE_ID: ConstCStrPtr = c"stdio".as_ptr();
 const MODULE_NAME: ConstCStrPtr = c"Standard Input and Output".as_ptr();
@@ -39,6 +39,7 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
         PipelineStepKind::Source | PipelineStepKind::Destination => {},
         _ => return ModuleStepConfigureFnResult::ErrorKindNotSupported,
     };
+    async_process::create_sender_and_receiver(args.step_handle);
     set_step_configuration(args);
     ModuleStepConfigureFnResult::Ok
 }
@@ -74,26 +75,41 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
             });
             ModuleStepStartFnResult::Ok
         },
-        PipelineStepKind::Destination => ModuleStepStartFnResult::Ok,
+        PipelineStepKind::Destination => {
+            thread::spawn(move || {
+                let tpl = get_param(args.step_handle, "format")
+                    .unwrap_or(String::from("%R"));
+
+                let rx = match async_process::get_receiver_owned(handle) {
+                    Some(r) => r,
+                    None => {
+                        error!("Record receiver is not registered for step '{}'", handle);
+                        (args.on_step_terminate_cb)(args.step_handle);
+                        return
+                    }
+                };
+                loop {
+                    let input: Record = match rx.recv_timeout(Duration::from_secs(1)) {
+                        Ok(r) => r,
+                        Err(_) => continue, // timeout
+                    }.into();
+
+                    let content = bytes_to_string_safe(input.content.bytes, input.content.len);
+                    let mtd_len = input.metadata.len as usize;
+                    let metadata = unsafe { Vec::from_raw_parts(input.metadata.data, mtd_len, mtd_len) }
+                        .into_iter()
+                        .map(|metadata_record| vec![cchar_to_string(metadata_record.name), cchar_to_string(metadata_record.value)].join(" = "))
+                        .collect::<Vec<String>>()
+                        .join(", ");
+
+                    let out_str = tpl
+                        .replace("%R", content.as_str())
+                        .replace("%M", metadata.as_str());
+                    println!("{}", out_str);
+                }
+            });
+            ModuleStepStartFnResult::Ok
+        },
         _ => ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step '{}' must be either source or destination", handle))),
     }
-}
-
-#[no_mangle]
-extern "C" fn torustiq_module_process_record(input: Record, h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
-    let content = bytes_to_string_safe(input.content.bytes, input.content.len);
-    let mtd_len = input.metadata.len as usize;
-    let metadata = unsafe { Vec::from_raw_parts(input.metadata.data, mtd_len, mtd_len) }
-        .into_iter()
-        .map(|metadata_record| vec![cchar_to_string(metadata_record.name), cchar_to_string(metadata_record.value)].join(" = "))
-        .collect::<Vec<String>>()
-        .join(", ");
-
-    let out_str = get_param(h, "format")
-        .unwrap_or(String::from("%R"))
-        .replace("%R", content.as_str())
-        .replace("%M", metadata.as_str());
-
-    println!("{}", out_str);
-    ModuleProcessRecordFnResult::Ok
 }

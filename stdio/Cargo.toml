@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 log = "0.4.21"
 once_cell = "1.19.0"
-torustiq-common = { path = "../../torustiq-common", features = ["pipeline_module_essentials", "export_fn__step_shutdown"] }
+torustiq-common = { path = "../../torustiq-common", features = ["pipeline_module_all"] }
 
 [lib]
 crate-type = ["cdylib"]

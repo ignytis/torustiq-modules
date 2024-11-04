@@ -1,6 +1,6 @@
 mod lua_env;
 
-use std::{fs, sync::mpsc::channel, thread, time::Duration};
+use std::{fs, thread, time::Duration};
 
 use log::error;
 use lua_env::LuaEnv;
@@ -18,7 +18,7 @@ use torustiq_common::{
         utils::strings::string_to_cchar
     },
     logging::init_logger,
-    pipeline::async_process
+    pipeline::async_process::{self, create_sender_and_receiver}
 };
 
 const MODULE_ID: ConstCStrPtr = c"lua".as_ptr();
@@ -40,11 +40,7 @@ extern "C" fn torustiq_module_init() {
 
 #[no_mangle]
 extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {    
-    let mut senders = async_process::RECORD_SENDERS.lock().unwrap();
-    let (sender, receiver) = channel::<Record>();
-    async_process::add_receiver(args.step_handle, receiver);
-    senders.insert(args.step_handle, sender);
-
+    create_sender_and_receiver(args.step_handle);
     set_step_configuration(args);
     ModuleStepConfigureFnResult::Ok
 }
