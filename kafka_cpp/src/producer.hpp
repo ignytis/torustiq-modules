@@ -9,6 +9,7 @@
 
 #include <librdkafka/rdkafkacpp.h>
 
+#include "utils/strings.hpp"
 #include "../../torustiq_common_typedefs.hpp"
 
 using namespace std;

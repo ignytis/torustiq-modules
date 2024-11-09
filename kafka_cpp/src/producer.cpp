@@ -10,32 +10,20 @@ Producer::Producer(map<string, string> driver_params)
     this->driver_params = driver_params;
 }
 
-// https://gist.github.com/GenesisFR/cceaf433d5b42dcdddecdddee0657292
-string replace_all(string str, const string &from, const string &to)
-{
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != string::npos)
-    {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // Handles case where 'to' is a substring of 'from'
-    }
-    return str;
-}
-
 void Producer::start()
 {
     string errstr;
 
     RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
 
+    // Set Kafka properties from driver parameter section
     map<string, string>::iterator it;
     for(it = this->driver_params.begin(); it != this->driver_params.end(); it++)
     {
         string k = it->first;
-        k = replace_all(k, "_", ".");
+        k = torustiq_kafka_cpp::utils::strings::replace_all(k, "_", ".");
         string v = it->second;
 
-        cout << "Setting '" << k << "' to " << v << endl ; 
         if (conf->set(k.c_str(), v.c_str(), errstr) != RdKafka::Conf::CONF_OK) {
             std::cerr << errstr << std::endl;
             exit(1);

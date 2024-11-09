@@ -8,12 +8,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(SOURCE_FILES
     src/main.cpp
     src/producer.cpp
+    src/utils/strings.cpp
 )
 
 # Add the header files to the project
 set(HEADER_FILES
     ../torustiq_common_typedefs.hpp
     src/producer.hpp
+    src/utils/strings.hpp
 )
 
 # Create the shared library (DLL)
