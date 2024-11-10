@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <string>
 #include <thread>
 
@@ -21,7 +22,7 @@ class Producer {
         Producer(map<string, string>);
 
         void start();
-        void produce(torustiq_common::ByteBuffer *buffer);
+        void produce(const string topic, const optional<string> *key, const map<string, string> *headers, const torustiq_common::ByteBuffer *buffer);
     private:
         map<string, string> driver_params;
 

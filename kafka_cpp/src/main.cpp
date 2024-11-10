@@ -1,6 +1,7 @@
-#include <map>
-#include <string>
 #include <cstring>
+#include <map>
+#include <optional>
+#include <string>
 
 #include "../../torustiq_common_typedefs.hpp"
 #include "producer.hpp"
@@ -11,6 +12,8 @@ const char *MODULE_NAME = "C++ implementation of Kafka";
 using namespace std;
 using namespace torustiq_common;
 using namespace torustiq_kafka_cpp;
+
+namespace strings = torustiq_kafka_cpp::utils::strings;
 
 map<ModuleStepHandle, ModuleStepConfigureArgs> ARGS;
 map<ModuleStepHandle, map<string, string>> STEP_PARAMS;
@@ -122,41 +125,44 @@ extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h
 
 extern "C" ModuleProcessRecordFnResult torustiq_module_process_record(Record in, ModuleStepHandle h)
 {
-    PRODUCER->produce(&in.content);
+    map<string, string> metadata;
+    RecordMetadata *mtd_raw_last = in.metadata.data + in.metadata.len;
+    for (RecordMetadata *mtd_raw = in.metadata.data; mtd_raw < mtd_raw_last; mtd_raw++)
+    {
+        metadata[string(mtd_raw->name)] = string(mtd_raw->value);
+    }
+    // Extract headers
+    map<string, string> headers;
+    for (pair<const string, string> item: metadata)
+    {
+        if (!strings::begins_with(item.first, "kafka.headers."))
+        {
+            continue;
+        }
 
-    return {
-        .tag = ModuleProcessRecordFnResult::Tag::Ok
-    };
+        string k = strings::strip_prefix(item.first, "kafka.headers.");
+        headers[k] = item.second;
+    }
+
+    optional<string> key = nullopt;
+    if (metadata.find("kafka.key") != metadata.end())
+    {
+        key = metadata["kafka.key"];
+    }
 
     
+    if (metadata.find("kafka.topic") == metadata.end())
+    {
+        cerr << "Missing the topic name in metadata" << endl;
+        return {
+            .tag = ModuleProcessRecordFnResult::Tag::Err,
+        };
+    }
+    string topic = metadata["kafka.topic"];
 
-    // let producer = match PRODUCER.lock().unwrap().clone() {
-    //     Some(p) => p,
-    //     None => {
-    //         error!("Cannot send a message to Kafka: producer is offline");
-    //         return ModuleProcessRecordFnResult::Ok
-    //     }
-    // };
-    // // TODO:
-    // // Instead of blocking, process a message using channel
-    // // Consider moving the torustiq_module_process_record function into common module, so all modules are expected
-    // //   to process records in async mode (using channels)
-    // let mtd = input.get_metadata_as_hashmap();
-    // let headers: HashMap<String, String> = mtd
-    //     .iter()
-    //     .filter(|(k, _)| k.starts_with("kafka.headers."))
-    //     .map(|(k, v)| (k.strip_prefix("kafka.headers.").unwrap().to_string(), v.clone()))
-    //     .collect();
-    // let key = mtd.get("kafka.key").cloned();
-    // let topic = mtd.get("kafka.topic").unwrap_or(&String::from("test")).clone(); // TODO: handle the missing topic
-    // match futures::executor::block_on(producer.produce(&KafkaMessage {
-    //     headers,
-    //     key,
-    //     payload: input.content.to_byte_vec(),
-    //     topic,
-    // })) {
-    //     Err(e) => print!("Failed to send a message to Kafka: {}", e),
-    //     _ => {},
-    // }
-    // ModuleProcessRecordFnResult::Ok
+    PRODUCER->produce(topic, &key, &headers, &in.content);
+
+    return {
+        .tag = ModuleProcessRecordFnResult::Tag::Ok,
+    };
 }

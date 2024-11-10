@@ -39,9 +39,14 @@ void Producer::start()
     delete conf;
 }
 
-void Producer::produce(torustiq_common::ByteBuffer *buffer)
+void Producer::produce(const string topic, const optional<string> *key, const map<string, string> *headers, const torustiq_common::ByteBuffer *buffer)
 {
-    string topic("my_topic_one");
+    RdKafka::Headers *rd_headers = RdKafka::Headers::create();
+    for (pair<const string, string> item: *headers)
+    {
+        rd_headers->add(item.first, item.second);
+    }
+
     RdKafka::ErrorCode err = this->rd_producer->produce(
         /* Topic name */
         topic,
@@ -55,11 +60,11 @@ void Producer::produce(torustiq_common::ByteBuffer *buffer)
         /* Value */
         buffer->bytes, buffer->len,
         /* Key */
-        NULL, 0,
+        key, 0,
         /* Timestamp (defaults to current time) */
         0,
         /* Message headers, if any */
-        NULL,
+        rd_headers,
         /* Per-message opaque value passed to
          * delivery report */
         NULL);
