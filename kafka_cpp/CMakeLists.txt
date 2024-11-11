@@ -6,13 +6,14 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Add the source files to the project
 set(SOURCE_FILES
-    src/main.cpp
+    src/lib.cpp
     src/producer.cpp
     src/utils/strings.cpp
 )
 
 # Add the header files to the project
 set(HEADER_FILES
+    src/lib.hpp
     ../torustiq_common_typedefs.hpp
     src/producer.hpp
     src/utils/strings.hpp

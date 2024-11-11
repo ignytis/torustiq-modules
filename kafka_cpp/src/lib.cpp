@@ -1,19 +1,7 @@
-#include <cstring>
-#include <map>
-#include <optional>
-#include <string>
-
-#include "../../torustiq_common_typedefs.hpp"
-#include "producer.hpp"
+#include "lib.hpp"
 
 const char *MODULE_ID = "kafka_cpp";
 const char *MODULE_NAME = "C++ implementation of Kafka";
-
-using namespace std;
-using namespace torustiq_common;
-using namespace torustiq_kafka_cpp;
-
-namespace strings = torustiq_kafka_cpp::utils::strings;
 
 map<ModuleStepHandle, ModuleStepConfigureArgs> ARGS;
 map<ModuleStepHandle, map<string, string>> STEP_PARAMS;
@@ -54,7 +42,7 @@ extern "C" ModuleStepConfigureFnResult torustiq_module_step_configure(ModuleStep
 
 extern "C" void torustiq_module_step_set_param(ModuleStepHandle h, ConstCharPtr k, ConstCharPtr v)
 {
-    if (STEP_PARAMS.find(h) == STEP_PARAMS.end())
+    if (maps::key_exists(h, STEP_PARAMS))
     {
         STEP_PARAMS[h] = {};
     }
@@ -64,7 +52,7 @@ extern "C" void torustiq_module_step_set_param(ModuleStepHandle h, ConstCharPtr 
 
 extern "C" void torustiq_module_step_shutdown(ModuleStepHandle h)
 {
-    if (ARGS.find(h) == ARGS.end())
+    if (maps::key_exists(h, ARGS))
     {
         return;
     }
@@ -78,7 +66,7 @@ extern "C" void torustiq_module_free_record(Record r) {
 
 extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h)
 {
-    if (ARGS.find(h) == ARGS.end())
+    if (maps::key_exists(h, ARGS))
     {
         return {
             .tag = ModuleStepStartFnResult::Tag::ErrorMisc,
@@ -87,7 +75,7 @@ extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h
             },
         };
     }
-    if (STEP_PARAMS.find(h) == STEP_PARAMS.end())
+    if (maps::key_exists(h, STEP_PARAMS))
     {
         return {
             .tag = ModuleStepStartFnResult::Tag::ErrorMisc,
@@ -145,13 +133,13 @@ extern "C" ModuleProcessRecordFnResult torustiq_module_process_record(Record in,
     }
 
     optional<string> key = nullopt;
-    if (metadata.find("kafka.key") != metadata.end())
+    if (maps::key_exists("kafka.key", metadata))
     {
         key = metadata["kafka.key"];
     }
 
     
-    if (metadata.find("kafka.topic") == metadata.end())
+    if (maps::key_exists("kafka.topic", metadata))
     {
         cerr << "Missing the topic name in metadata" << endl;
         return {
