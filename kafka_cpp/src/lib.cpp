@@ -42,7 +42,7 @@ extern "C" ModuleStepConfigureFnResult torustiq_module_step_configure(ModuleStep
 
 extern "C" void torustiq_module_step_set_param(ModuleStepHandle h, ConstCharPtr k, ConstCharPtr v)
 {
-    if (maps::key_exists(h, STEP_PARAMS))
+    if (!maps::key_exists(h, STEP_PARAMS))
     {
         STEP_PARAMS[h] = {};
     }
@@ -52,7 +52,7 @@ extern "C" void torustiq_module_step_set_param(ModuleStepHandle h, ConstCharPtr 
 
 extern "C" void torustiq_module_step_shutdown(ModuleStepHandle h)
 {
-    if (maps::key_exists(h, ARGS))
+    if (!maps::key_exists(h, ARGS))
     {
         return;
     }
@@ -66,21 +66,24 @@ extern "C" void torustiq_module_free_record(Record r) {
 
 extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h)
 {
-    if (maps::key_exists(h, ARGS))
+    if (!maps::key_exists(h, ARGS))
     {
         return {
             .tag = ModuleStepStartFnResult::Tag::ErrorMisc,
             .error_misc = {
-                ._0 = (string("Init args for step '") + to_string(h) + string("' not found")).c_str(),
+                // TODO:
+                // Free result here and below
+                // Is free result needed in Rust code too?
+                ._0 = (new string(string("Init args for step '") + to_string(h) + string("' not found")))->c_str(),
             },
         };
     }
-    if (maps::key_exists(h, STEP_PARAMS))
+    if (!maps::key_exists(h, STEP_PARAMS))
     {
         return {
             .tag = ModuleStepStartFnResult::Tag::ErrorMisc,
             .error_misc = {
-                ._0 = (string("Step params for step '") + to_string(h) + string("' not found")).c_str(),
+                ._0 = (new string(string("Step params for step '") + to_string(h) + string("' not found")))->c_str(),
             },
         };
     }
@@ -104,11 +107,24 @@ extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h
     }
 
     PRODUCER = new Producer(driver_params);
-    PRODUCER->start();
+    optional<string> error = PRODUCER->start();
+    ModuleStepStartFnResult res;
+    if (nullopt == error)
+    {
+        res  = {
+            .tag = ModuleStepStartFnResult::Tag::Ok,
+        };
+    } else {
+        string *err = new string(error.value());
+        res = {
+            .tag = ModuleStepStartFnResult::Tag::ErrorMisc,
+            .error_misc = {
+                ._0 = err->c_str(),
+            },
+        };
+    }
 
-    return {
-        .tag = ModuleStepStartFnResult::Tag::Ok,
-    };
+    return res;
 }
 
 extern "C" ModuleProcessRecordFnResult torustiq_module_process_record(Record in, ModuleStepHandle h)
@@ -139,7 +155,7 @@ extern "C" ModuleProcessRecordFnResult torustiq_module_process_record(Record in,
     }
 
     
-    if (maps::key_exists("kafka.topic", metadata))
+    if (!maps::key_exists("kafka.topic", metadata))
     {
         cerr << "Missing the topic name in metadata" << endl;
         return {

@@ -10,33 +10,29 @@ Producer::Producer(map<string, string> driver_params)
     this->driver_params = driver_params;
 }
 
-void Producer::start()
+optional<string> Producer::start()
 {
     string errstr;
 
-    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
-
     // Set Kafka properties from driver parameter section
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
     map<string, string>::iterator it;
     for(it = this->driver_params.begin(); it != this->driver_params.end(); it++)
     {
-        string k = it->first;
-        k = torustiq_kafka_cpp::utils::strings::replace_all(k, "_", ".");
+        string k = torustiq_kafka_cpp::utils::strings::replace_all(it->first, "_", ".");
         string v = it->second;
-
         if (conf->set(k.c_str(), v.c_str(), errstr) != RdKafka::Conf::CONF_OK) {
-            std::cerr << errstr << std::endl;
-            exit(1);
+            return string(errstr);
         }
     }
 
     this->rd_producer = RdKafka::Producer::create(conf, errstr);
     if (!this->rd_producer) {
-        std::cerr << "Failed to create producer: " << errstr << std::endl;
-        exit(1);
+        return string(errstr);
     }
 
     delete conf;
+    return nullopt;
 }
 
 void Producer::produce(const string topic, const optional<string> *key, const map<string, string> *headers, const torustiq_common::ByteBuffer *buffer)
@@ -47,61 +43,16 @@ void Producer::produce(const string topic, const optional<string> *key, const ma
         rd_headers->add(item.first, item.second);
     }
 
-    RdKafka::ErrorCode err = this->rd_producer->produce(
-        /* Topic name */
-        topic,
-        /* Any Partition: the builtin partitioner will be
-         * used to assign the message to a topic based
-         * on the message key, or random partition if
-         * the key is not set. */
-        RdKafka::Topic::PARTITION_UA,
-        /* Make a copy of the value */
-        RdKafka::Producer::RK_MSG_COPY /* Copy payload */,
-        /* Value */
-        buffer->bytes, buffer->len,
-        /* Key */
-        key, 0,
-        /* Timestamp (defaults to current time) */
-        0,
-        /* Message headers, if any */
-        rd_headers,
-        /* Per-message opaque value passed to
-         * delivery report */
-        NULL);
+    RdKafka::ErrorCode err = this->rd_producer->produce(topic, RdKafka::Topic::PARTITION_UA,
+        RdKafka::Producer::RK_MSG_COPY, buffer->bytes, buffer->len, key, 0,
+        0, rd_headers, NULL);
 
     if (err != RdKafka::ERR_NO_ERROR) {
       std::cerr << "% Failed to produce to topic " << topic << ": "
                 << RdKafka::err2str(err) << std::endl;
-
-      if (err == RdKafka::ERR__QUEUE_FULL) {
-        /* If the internal queue is full, wait for
-         * messages to be delivered and then retry.
-         * The internal queue represents both
-         * messages to be sent and messages that have
-         * been sent or failed, awaiting their
-         * delivery report callback to be called.
-         *
-         * The internal queue is limited by the
-         * configuration property
-         * queue.buffering.max.messages and queue.buffering.max.kbytes */
-        this->rd_producer->poll(1000 /*block for max 1000ms*/);
-      }
-
-    } else {
-      std::cerr << "% Enqueued message (" << buffer->len << " bytes) "
-                << "for topic " << topic << std::endl;
     }
 
-    /* A producer application should continually serve
-     * the delivery report queue by calling poll()
-     * at frequent intervals.
-     * Either put the poll call in your main loop, or in a
-     * dedicated thread, or call it after every produce() call.
-     * Just make sure that poll() is still called
-     * during periods where you are not producing any messages
-     * to make sure previously produced messages have their
-     * delivery report callback served (and any other callbacks
-     * you register). */
+    // TODO: move to thread
     this->rd_producer->poll(0);
 }
 }

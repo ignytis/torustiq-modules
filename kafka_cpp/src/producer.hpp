@@ -21,7 +21,7 @@ class Producer {
     public:
         Producer(map<string, string>);
 
-        void start();
+        optional<string> start();
         void produce(const string topic, const optional<string> *key, const map<string, string> *headers, const torustiq_common::ByteBuffer *buffer);
     private:
         map<string, string> driver_params;
