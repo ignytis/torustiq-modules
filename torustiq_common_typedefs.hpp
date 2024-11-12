@@ -153,6 +153,9 @@ void torustiq_module_step_shutdown(ModuleStepHandle h);
 /// Deallocates memory for a record
 void torustiq_module_free_record(Record r);
 
+/// Deallocates memory for a record
+void torustiq_module_free_char_ptr(ConstCharPtr c);
+
 ModuleProcessRecordFnResult torustiq_module_process_record(Record in_record,
                                                            ModuleStepHandle step_handle);
 

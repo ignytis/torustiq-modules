@@ -59,6 +59,10 @@ extern "C" void torustiq_module_step_shutdown(ModuleStepHandle h)
     ARGS[h].on_step_terminate_cb(h);
 }
 
+extern "C" void torustiq_module_free_char_ptr(const char* c) {
+    delete c;
+}
+
 extern "C" void torustiq_module_free_record(Record r) {
     delete r.content.bytes;
     delete r.metadata.data;
