@@ -32,6 +32,8 @@ optional<string> Producer::start()
     }
 
     delete conf;
+
+    this->rd_producer_poll_thread = thread(kafka_poll_thread, this);
     return nullopt;
 }
 
@@ -43,16 +45,40 @@ void Producer::produce(const string topic, const optional<string> *key, const ma
         rd_headers->add(item.first, item.second);
     }
 
+    this->rd_producer_lock();
     RdKafka::ErrorCode err = this->rd_producer->produce(topic, RdKafka::Topic::PARTITION_UA,
         RdKafka::Producer::RK_MSG_COPY, buffer->bytes, buffer->len, key, 0,
         0, rd_headers, NULL);
+    this->rd_producer_unlock();
 
     if (err != RdKafka::ERR_NO_ERROR) {
       std::cerr << "% Failed to produce to topic " << topic << ": "
                 << RdKafka::err2str(err) << std::endl;
     }
+}
 
-    // TODO: move to thread
+void Producer::rd_producer_lock()
+{
+    this->rd_producer_mtx.lock();
+}
+
+void Producer::rd_producer_unlock()
+{
+    this->rd_producer_mtx.unlock();
+}
+
+void Producer::rd_producer_poll()
+{
     this->rd_producer->poll(0);
+}
+
+void kafka_poll_thread(Producer *producer)
+{
+    while(true) {
+        producer->rd_producer_lock();
+        producer->rd_producer_poll();
+        producer->rd_producer_unlock();
+        this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 }
 }

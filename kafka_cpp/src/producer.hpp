@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -23,13 +24,19 @@ class Producer {
 
         optional<string> start();
         void produce(const string topic, const optional<string> *key, const map<string, string> *headers, const torustiq_common::ByteBuffer *buffer);
+        void rd_producer_lock();
+        void rd_producer_unlock();
+        void rd_producer_poll();
+
+        mutex rd_producer_mtx;
     private:
         map<string, string> driver_params;
 
         RdKafka::Producer *rd_producer = nullptr;
+        thread rd_producer_poll_thread;
 };
 
-void kafka_thread(RdKafka::Producer *producer);
+void kafka_poll_thread(Producer *producer);
 }
 
 #endif
