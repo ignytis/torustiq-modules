@@ -157,14 +157,22 @@ extern "C" ModuleProcessRecordFnResult torustiq_module_process_record(Record in,
     
     if (!maps::key_exists("kafka.topic", metadata))
     {
-        cerr << "Missing the topic name in metadata" << endl;
         return {
             .tag = ModuleProcessRecordFnResult::Tag::Err,
+            .err = (new string("Missing the topic name in metadata"))->c_str(),
         };
     }
     string topic = metadata["kafka.topic"];
 
-    PRODUCER->produce(topic, &key, &headers, &in.content);
+    optional<string> err = PRODUCER->produce(topic, &key, &headers, &in.content);
+    if (err.has_value())
+    {
+        return {
+            .tag = ModuleProcessRecordFnResult::Tag::Err,
+            .err = (new string(err.value()))->c_str(),
+        };
+    }
+
 
     return {
         .tag = ModuleProcessRecordFnResult::Tag::Ok,

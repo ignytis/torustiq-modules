@@ -60,8 +60,7 @@ struct ModuleProcessRecordFnResult {
   };
 
   struct Err_Body {
-    Record _0;
-    ConstCharPtr _1;
+    ConstCharPtr _0;
   };
 
   Tag tag;

@@ -23,7 +23,9 @@ class Producer {
         Producer(map<string, string>);
 
         optional<string> start();
-        void produce(const string topic, const optional<string> *key, const map<string, string> *headers, const torustiq_common::ByteBuffer *buffer);
+        // Returns an error string if error occurred
+        optional<string> produce(const string topic, const optional<string> *key, const map<string, string> *headers,
+            const torustiq_common::ByteBuffer *buffer);
         void rd_producer_lock();
         void rd_producer_unlock();
         void rd_producer_poll();

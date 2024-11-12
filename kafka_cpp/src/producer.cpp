@@ -37,7 +37,7 @@ optional<string> Producer::start()
     return nullopt;
 }
 
-void Producer::produce(const string topic, const optional<string> *key, const map<string, string> *headers, const torustiq_common::ByteBuffer *buffer)
+optional<string> Producer::produce(const string topic, const optional<string> *key, const map<string, string> *headers, const torustiq_common::ByteBuffer *buffer)
 {
     RdKafka::Headers *rd_headers = RdKafka::Headers::create();
     for (pair<const string, string> item: *headers)
@@ -52,9 +52,10 @@ void Producer::produce(const string topic, const optional<string> *key, const ma
     this->rd_producer_unlock();
 
     if (err != RdKafka::ERR_NO_ERROR) {
-      std::cerr << "% Failed to produce to topic " << topic << ": "
-                << RdKafka::err2str(err) << std::endl;
+        return RdKafka::err2str(err);
     }
+
+    return nullopt;
 }
 
 void Producer::rd_producer_lock()
