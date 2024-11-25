@@ -84,7 +84,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_process_record(input: Record, _h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
+extern "C" fn torustiq_module_step_process_record(input: Record, _h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
     let producer = match PRODUCER.lock().unwrap().clone() {
         Some(p) => p,
         None => {
@@ -94,7 +94,7 @@ extern "C" fn torustiq_module_process_record(input: Record, _h: ModuleStepHandle
     };
     // TODO:
     // Instead of blocking, process a message using channel
-    // Consider moving the torustiq_module_process_record function into common module, so all modules are expected
+    // Consider moving the torustiq_module_step_process_record function into common module, so all modules are expected
     //   to process records in async mode (using channels)
     let mtd = input.get_metadata_as_hashmap();
     let headers: HashMap<String, String> = mtd

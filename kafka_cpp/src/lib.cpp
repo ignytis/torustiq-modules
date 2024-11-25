@@ -131,7 +131,7 @@ extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h
     return res;
 }
 
-extern "C" ModuleProcessRecordFnResult torustiq_module_process_record(Record in, ModuleStepHandle h)
+extern "C" ModuleProcessRecordFnResult torustiq_module_step_process_record(Record in, ModuleStepHandle h)
 {
     map<string, string> metadata;
     RecordMetadata *mtd_raw_last = in.metadata.data + in.metadata.len;

@@ -74,8 +74,8 @@ pub fn thread_python_env<F>(code: String, python_routine_fn: F) where F: Fn(Boun
         let module: Bound<PyModule> = PyModule::from_code_bound(
             py,
             &code,
-            "torustiq_module_process_record.py",
-            "torustiq_module_process_record",
+            "torustiq_module_step_process_record.py",
+            "torustiq_module_step_process_record",
         ).unwrap();
         // Register a PyRecord class and torustiq_send Python function
         module.add_class::<py_record::PyRecord>().unwrap();
