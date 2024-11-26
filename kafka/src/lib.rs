@@ -27,8 +27,10 @@ use torustiq_common::{
 };
 use crate::kafka_producer::KafkaProducer;
 
-const MODULE_ID: ConstCStrPtr = c"kafka".as_ptr();
-const MODULE_NAME: ConstCStrPtr = c"Kafka output".as_ptr();
+const MODULE_INFO: ModuleInfo = ModuleInfo {
+    id: c"kafka".as_ptr(),
+    name: c"Kafka output".as_ptr(),
+};
 
 static PRODUCER: Lazy<Mutex<Option<KafkaProducer>>> = Lazy::new(|| {
     Mutex::new(None)
@@ -36,10 +38,7 @@ static PRODUCER: Lazy<Mutex<Option<KafkaProducer>>> = Lazy::new(|| {
 
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
-    ModuleInfo {
-        id: MODULE_ID,
-        name: MODULE_NAME,
-    }
+    MODULE_INFO
 }
 
 #[no_mangle]

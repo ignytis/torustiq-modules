@@ -21,13 +21,14 @@ use torustiq_common::{
 
 const MODULE_ID: ConstCStrPtr = c"python".as_ptr();
 const MODULE_NAME: ConstCStrPtr = c"Python integration".as_ptr();
+const MODULE_INFO: ModuleInfo = ModuleInfo {
+    id: MODULE_ID,
+    name: MODULE_NAME,
+};
 
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
-    ModuleInfo {
-        id: MODULE_ID,
-        name: MODULE_NAME,
-    }
+    MODULE_INFO
 }
 
 #[no_mangle]

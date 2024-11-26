@@ -29,13 +29,14 @@ static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleStepHandle, HashMap<String, Strin
 
 const MODULE_ID: ConstCStrPtr = c"source_http".as_ptr();
 const MODULE_NAME: ConstCStrPtr = c"HTTP Source".as_ptr();
+const MODULE_INFO: ModuleInfo = ModuleInfo {
+    id: MODULE_ID,
+    name: MODULE_NAME,
+};
 
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
-    ModuleInfo {
-        id: MODULE_ID,
-        name: MODULE_NAME,
-    }
+    MODULE_INFO
 }
 
 #[no_mangle]
