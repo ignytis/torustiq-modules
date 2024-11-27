@@ -9,6 +9,15 @@
 
 namespace torustiq_common {
 
+constexpr static const uint32_t CURRENT_API_VERSION = 1;
+
+enum class ModuleKind {
+  /// A pipeline step module. Extracts, transforms, loads the data.
+  Step,
+  /// An event listener module. Reacts to application events.
+  EventListener,
+};
+
 /// Specifies the position of step in pipeline
 enum class PipelineStepKind {
   /// Source: produces the data itself, no input from other steps is expected.
@@ -71,7 +80,9 @@ struct ModuleProcessRecordFnResult {
 
 /// Module information
 struct ModuleInfo {
+  Uint api_version;
   ConstCharPtr id;
+  ModuleKind kind;
   ConstCharPtr name;
 };
 
@@ -157,7 +168,7 @@ void torustiq_module_free_record(Record r);
 void torustiq_module_free_char_ptr(ConstCharPtr c);
 
 ModuleProcessRecordFnResult torustiq_module_step_process_record(Record in_record,
-                                                           ModuleStepHandle step_handle);
+                                                                ModuleStepHandle step_handle);
 
 }  // extern "C"
 

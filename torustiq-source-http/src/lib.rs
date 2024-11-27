@@ -11,27 +11,25 @@ use torustiq_common::{
             get_step_configuration,
             set_step_configuration
         },
-        types::{
-            module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
-                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
-            },
-            std_types::ConstCStrPtr
+        types::module::{
+            ModuleInfo, ModuleKind, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+            ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
         },
         utils::strings::string_to_cchar
     },
-    logging::init_logger
+    logging::init_logger,
+    CURRENT_API_VERSION
 };
 
 static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleStepHandle, HashMap<String, String>>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
 
-const MODULE_ID: ConstCStrPtr = c"source_http".as_ptr();
-const MODULE_NAME: ConstCStrPtr = c"HTTP Source".as_ptr();
 const MODULE_INFO: ModuleInfo = ModuleInfo {
-    id: MODULE_ID,
-    name: MODULE_NAME,
+    api_version: CURRENT_API_VERSION,
+    id: c"source_http".as_ptr(),
+    kind: ModuleKind::Step,
+    name: c"HTTP Source".as_ptr(),
 };
 
 #[no_mangle]

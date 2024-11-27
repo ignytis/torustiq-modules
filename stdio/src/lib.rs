@@ -8,20 +8,20 @@ use torustiq_common::{
         types::{
             buffer::ByteBuffer, collections::Array,
             module::{
-                ModuleInfo, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+                ModuleInfo, ModuleKind, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
                 ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
             },
-            std_types::ConstCStrPtr
         },
         utils::strings::{bytes_to_string_safe, cchar_to_string, string_to_cchar}
     },
-    logging::init_logger, pipeline::async_process};
+    logging::init_logger, pipeline::async_process,
+    CURRENT_API_VERSION};
 
-const MODULE_ID: ConstCStrPtr = c"stdio".as_ptr();
-const MODULE_NAME: ConstCStrPtr = c"Standard Input and Output".as_ptr();
 const MODULE_INFO: ModuleInfo = ModuleInfo {
-    id: MODULE_ID,
-    name: MODULE_NAME,
+    api_version: CURRENT_API_VERSION,
+    id: c"stdio".as_ptr(),
+    kind: ModuleKind::Step,
+    name: c"Standard Input and Output".as_ptr(),
 };
 
 #[no_mangle]

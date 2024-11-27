@@ -8,24 +8,22 @@ use lua_env::LuaEnv;
 use torustiq_common::{
     ffi::{
         shared::{get_param, get_step_configuration, set_step_configuration},
-        types::{
-            module::{
-                ModuleInfo, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
-                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
-            },
-            std_types::ConstCStrPtr
+        types::module::{
+            ModuleInfo, ModuleKind, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+            ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
         },
         utils::strings::string_to_cchar
     },
     logging::init_logger,
-    pipeline::async_process::{self, create_sender_and_receiver}
+    pipeline::async_process::{self, create_sender_and_receiver},
+    CURRENT_API_VERSION,
 };
 
-const MODULE_ID: ConstCStrPtr = c"lua".as_ptr();
-const MODULE_NAME: ConstCStrPtr = c"Lua".as_ptr();
 const MODULE_INFO: ModuleInfo = ModuleInfo {
-    id: MODULE_ID,
-    name: MODULE_NAME,
+    api_version: CURRENT_API_VERSION,
+    id: c"lua".as_ptr(),
+    kind: ModuleKind::Step,
+    name: c"Lua".as_ptr(),
 };
 
 #[no_mangle]

@@ -3,7 +3,9 @@
 const char *MODULE_ID = "kafka_cpp";
 const char *MODULE_NAME = "C++ implementation of Kafka";
 const ModuleInfo MODULE_INFO = {
+    .api_version = CURRENT_API_VERSION,
     .id = MODULE_ID,
+    .kind = ModuleKind::Step,
     .name = MODULE_NAME,
 };
 

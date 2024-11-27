@@ -7,23 +7,22 @@ use py_env::{thread_python_env, thread_receiver, thread_sender};
 use torustiq_common::{
     ffi::{
         shared::{get_param, get_step_configuration, set_step_configuration},
-        types::{
-            module::{
-                ModuleInfo, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
-                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind,
-            },
-            std_types::ConstCStrPtr,
-        }, utils::strings::string_to_cchar
+        types::module::{
+            ModuleInfo, ModuleKind, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
+            ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind
+        },
+        utils::strings::string_to_cchar
     },
     logging::init_logger,
     pipeline::async_process,
+    CURRENT_API_VERSION,
 };
 
-const MODULE_ID: ConstCStrPtr = c"python".as_ptr();
-const MODULE_NAME: ConstCStrPtr = c"Python integration".as_ptr();
 const MODULE_INFO: ModuleInfo = ModuleInfo {
-    id: MODULE_ID,
-    name: MODULE_NAME,
+    api_version: CURRENT_API_VERSION,
+    id: c"python".as_ptr(),
+    kind: ModuleKind::Step,
+    name: c"Python integration".as_ptr(),
 };
 
 #[no_mangle]
