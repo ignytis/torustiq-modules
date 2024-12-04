@@ -9,8 +9,8 @@ use torustiq_common::{
     ffi::{
         shared::{get_param, get_step_configuration, set_step_configuration},
         types::module::{
-            ModuleInfo, ModuleKind, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
-            ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
+            ModuleInfo, ModuleKind, ModulePipelineStepConfigureArgs, ModuleStepConfigureFnResult,
+            ModuleStepHandle, StepStartFnResult, PipelineStepKind, Record
         },
         utils::strings::string_to_cchar
     },
@@ -22,7 +22,7 @@ use torustiq_common::{
 const MODULE_INFO: ModuleInfo = ModuleInfo {
     api_version: CURRENT_API_VERSION,
     id: c"lua".as_ptr(),
-    kind: ModuleKind::Step,
+    kind: ModuleKind::Pipeline,
     name: c"Lua".as_ptr(),
 };
 
@@ -37,30 +37,30 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {    
+extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {    
     create_sender_and_receiver(args.step_handle);
     set_step_configuration(args);
     ModuleStepConfigureFnResult::Ok
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStepStartFnResult {
+extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
     let args = match get_step_configuration(handle) {
         Some(a) => a,
-        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
+        None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
     let code = match get_param(handle, "file") {
         Some(f) => {
             match fs::read_to_string(f.clone()) {
                 Ok(c) => c,
-                Err(e) => return ModuleStepStartFnResult::ErrorMisc(
+                Err(e) => return StepStartFnResult::ErrorMisc(
                     string_to_cchar(format!("Failed to read contents of Lua file '{}': {}", f, e)))
             }
         },
         None => match get_param(handle, "code_contents") {
             Some(c) => c,
-            None => return ModuleStepStartFnResult::ErrorMisc(
+            None => return StepStartFnResult::ErrorMisc(
                 string_to_cchar("Either 'file' or 'code_contents' attribute must be provided for Lua handler")),
         }
     };
@@ -129,5 +129,5 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
             });
         },
     };
-    ModuleStepStartFnResult::Ok
+    StepStartFnResult::Ok
 }

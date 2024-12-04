@@ -16,8 +16,8 @@ use torustiq_common::{
         },
         types::{
             module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModuleStepConfigureArgs,
-                ModuleStepConfigureFnResult, ModuleStepHandle, ModuleStepStartFnResult,
+                ModuleInfo, ModuleProcessRecordFnResult, ModulePipelineStepConfigureArgs,
+                ModuleStepConfigureFnResult, ModuleStepHandle, StepStartFnResult,
                 PipelineStepKind, Record
             },
             std_types::ConstCStrPtr
@@ -47,7 +47,7 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
+extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {
     if args.kind != PipelineStepKind::Destination {
         return ModuleStepConfigureFnResult::ErrorKindNotSupported
     }
@@ -57,10 +57,10 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStepStartFnResult {
+extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
     let args = match get_step_configuration(handle) {
         Some(a) => a,
-        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
+        None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
     let step_params = match get_params(args.step_handle) {
@@ -79,7 +79,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
         .collect();
 
     *PRODUCER.lock().unwrap() = Some(KafkaProducer::new(&driver_params));
-    ModuleStepStartFnResult::Ok
+    StepStartFnResult::Ok
 }
 
 #[no_mangle]

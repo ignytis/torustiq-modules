@@ -12,8 +12,8 @@ use torustiq_common::{
             set_step_configuration
         },
         types::module::{
-            ModuleInfo, ModuleKind, ModuleProcessRecordFnResult, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
-            ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
+            ModuleInfo, ModuleKind, ModuleProcessRecordFnResult, ModulePipelineStepConfigureArgs, ModuleStepConfigureFnResult,
+            ModuleStepHandle, StepStartFnResult, PipelineStepKind, Record
         },
         utils::strings::string_to_cchar
     },
@@ -28,7 +28,7 @@ static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleStepHandle, HashMap<String, Strin
 const MODULE_INFO: ModuleInfo = ModuleInfo {
     api_version: CURRENT_API_VERSION,
     id: c"source_http".as_ptr(),
-    kind: ModuleKind::Step,
+    kind: ModuleKind::Pipeline,
     name: c"HTTP Source".as_ptr(),
 };
 
@@ -44,7 +44,7 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
+extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {
     if args.kind != PipelineStepKind::Source {
         return ModuleStepConfigureFnResult::ErrorKindNotSupported;
     }
@@ -54,10 +54,10 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStepStartFnResult {
+extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
     let args = match get_step_configuration(handle) {
         Some(a) => a,
-        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
+        None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
     let module_params_container = MODULE_PARAMS.lock().unwrap();
@@ -70,7 +70,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
     let port = port.unwrap_or(&String::from("8080")).clone();
     let port = port.parse::<u16>().expect(format!("Failed to parse the port number: {}", port).as_str());
     thread::spawn(move || http::run_server(args, host, port));
-    ModuleStepStartFnResult::Ok
+    StepStartFnResult::Ok
 }
 
 /// Do nothing. The module is not supposed to process records from previous steps

@@ -8,8 +8,8 @@ use torustiq_common::{
         types::{
             buffer::ByteBuffer, collections::Array,
             module::{
-                ModuleInfo, ModuleKind, ModuleStepConfigureArgs, ModuleStepConfigureFnResult,
-                ModuleStepHandle, ModuleStepStartFnResult, PipelineStepKind, Record
+                ModuleInfo, ModuleKind, ModulePipelineStepConfigureArgs, ModuleStepConfigureFnResult,
+                ModuleStepHandle, StepStartFnResult, PipelineStepKind, Record
             },
         },
         utils::strings::{bytes_to_string_safe, cchar_to_string, string_to_cchar}
@@ -20,7 +20,7 @@ use torustiq_common::{
 const MODULE_INFO: ModuleInfo = ModuleInfo {
     api_version: CURRENT_API_VERSION,
     id: c"stdio".as_ptr(),
-    kind: ModuleKind::Step,
+    kind: ModuleKind::Pipeline,
     name: c"Standard Input and Output".as_ptr(),
 };
 
@@ -35,7 +35,7 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> ModuleStepConfigureFnResult {
+extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {
     match args.kind {
         PipelineStepKind::Source | PipelineStepKind::Destination => {},
         _ => return ModuleStepConfigureFnResult::ErrorKindNotSupported,
@@ -46,10 +46,10 @@ extern "C" fn torustiq_module_step_configure(args: ModuleStepConfigureArgs) -> M
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStepStartFnResult {
+extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
     let args = match get_step_configuration(handle) {
         Some(a) => a,
-        None => return ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
+        None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
     match args.kind {
@@ -74,7 +74,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
                 debug!("End of stdin is reached. Terminating the stdin source...");
                 (args.on_step_terminate_cb)(args.step_handle);
             });
-            ModuleStepStartFnResult::Ok
+            StepStartFnResult::Ok
         },
         PipelineStepKind::Destination => {
             thread::spawn(move || {
@@ -109,8 +109,8 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> ModuleStep
                     println!("{}", out_str);
                 }
             });
-            ModuleStepStartFnResult::Ok
+            StepStartFnResult::Ok
         },
-        _ => ModuleStepStartFnResult::ErrorMisc(string_to_cchar(format!("Step '{}' must be either source or destination", handle))),
+        _ => StepStartFnResult::ErrorMisc(string_to_cchar(format!("Step '{}' must be either source or destination", handle))),
     }
 }

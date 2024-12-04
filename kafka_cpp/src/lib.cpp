@@ -5,11 +5,11 @@ const char *MODULE_NAME = "C++ implementation of Kafka";
 const ModuleInfo MODULE_INFO = {
     .api_version = CURRENT_API_VERSION,
     .id = MODULE_ID,
-    .kind = ModuleKind::Step,
+    .kind = ModuleKind::Pipeline,
     .name = MODULE_NAME,
 };
 
-map<ModuleStepHandle, ModuleStepConfigureArgs> ARGS;
+map<ModuleStepHandle, ModulePipelineStepConfigureArgs> ARGS;
 map<ModuleStepHandle, map<string, string>> STEP_PARAMS;
 
 Producer *PRODUCER = nullptr;
@@ -24,7 +24,7 @@ extern "C" void torustiq_module_init()
     // no action
 }
 
-extern "C" ModuleStepConfigureFnResult torustiq_module_step_configure(ModuleStepConfigureArgs args)
+extern "C" ModuleStepConfigureFnResult torustiq_module_step_configure(ModulePipelineStepConfigureArgs args)
 {
     ModuleStepConfigureFnResult result;
     
@@ -42,7 +42,7 @@ extern "C" ModuleStepConfigureFnResult torustiq_module_step_configure(ModuleStep
     };
 }
 
-extern "C" void torustiq_module_step_set_param(ModuleStepHandle h, ConstCharPtr k, ConstCharPtr v)
+extern "C" void torustiq_step_set_param(ModuleStepHandle h, ConstCharPtr k, ConstCharPtr v)
 {
     if (!maps::key_exists(h, STEP_PARAMS))
     {
@@ -70,12 +70,12 @@ extern "C" void torustiq_module_free_record(Record r) {
     delete r.metadata.data;
 }
 
-extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h)
+extern "C" StepStartFnResult torustiq_module_step_start(ModuleStepHandle h)
 {
     if (!maps::key_exists(h, ARGS))
     {
         return {
-            .tag = ModuleStepStartFnResult::Tag::ErrorMisc,
+            .tag = StepStartFnResult::Tag::ErrorMisc,
             .error_misc = {
                 // TODO:
                 // Free result here and below
@@ -87,14 +87,14 @@ extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h
     if (!maps::key_exists(h, STEP_PARAMS))
     {
         return {
-            .tag = ModuleStepStartFnResult::Tag::ErrorMisc,
+            .tag = StepStartFnResult::Tag::ErrorMisc,
             .error_misc = {
                 ._0 = (new string(string("Step params for step '") + to_string(h) + string("' not found")))->c_str(),
             },
         };
     }
 
-    ModuleStepConfigureArgs args = ARGS[h];
+    ModulePipelineStepConfigureArgs args = ARGS[h];
     map<string, string> step_params = STEP_PARAMS[h];
     map<string, string> driver_params;
 
@@ -114,16 +114,16 @@ extern "C" ModuleStepStartFnResult torustiq_module_step_start(ModuleStepHandle h
 
     PRODUCER = new Producer(driver_params);
     optional<string> error = PRODUCER->start();
-    ModuleStepStartFnResult res;
+    StepStartFnResult res;
     if (nullopt == error)
     {
         res  = {
-            .tag = ModuleStepStartFnResult::Tag::Ok,
+            .tag = StepStartFnResult::Tag::Ok,
         };
     } else {
         string *err = new string(error.value());
         res = {
-            .tag = ModuleStepStartFnResult::Tag::ErrorMisc,
+            .tag = StepStartFnResult::Tag::ErrorMisc,
             .error_misc = {
                 ._0 = err->c_str(),
             },

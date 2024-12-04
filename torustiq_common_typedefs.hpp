@@ -94,7 +94,7 @@ using ModuleTerminationHandlerFn = void(*)(Uint);
 using ModuleOnDataReceivedFn = void(*)(Record, ModuleStepHandle);
 
 /// Arguments passed to init function
-struct ModuleStepConfigureArgs {
+struct ModulePipelineStepConfigureArgs {
   PipelineStepKind kind;
   ModuleStepHandle step_handle;
   ModuleTerminationHandlerFn on_step_terminate_cb;
@@ -133,7 +133,7 @@ struct ModuleStepConfigureFnResult {
 };
 
 /// Returns the status of module step start
-struct ModuleStepStartFnResult {
+struct StepStartFnResult {
   enum class Tag {
     /// Started successfully
     Ok,
@@ -156,7 +156,7 @@ using ConstCStrPtr = const int8_t*;
 extern "C" {
 
 /// Sets a parameter for step
-void torustiq_module_step_set_param(ModuleStepHandle h, ConstCharPtr k, ConstCharPtr v);
+void torustiq_step_set_param(ModuleStepHandle h, ConstCharPtr k, ConstCharPtr v);
 
 /// Called by main application to trigger the shutdown
 void torustiq_module_step_shutdown(ModuleStepHandle h);
