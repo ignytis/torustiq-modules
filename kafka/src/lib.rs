@@ -103,14 +103,13 @@ extern "C" fn torustiq_module_step_process_record(input: Record, _h: ModuleStepH
         .collect();
     let key = mtd.get("kafka.key").cloned();
     let topic = mtd.get("kafka.topic").unwrap_or(&String::from("test")).clone(); // TODO: handle the missing topic
-    match futures::executor::block_on(producer.produce(&KafkaMessage {
+    if let Err(e) = futures::executor::block_on(producer.produce(&KafkaMessage {
         headers,
         key,
         payload: input.content.to_byte_vec(),
         topic,
     })) {
-        Err(e) => print!("Failed to send a message to Kafka: {}", e),
-        _ => {},
+        print!("Failed to send a message to Kafka: {}", e)
     }
     ModuleProcessRecordFnResult::Ok
 }

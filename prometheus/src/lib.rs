@@ -30,7 +30,7 @@ extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureAr
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
+extern "C" fn torustiq_module_step_start(_handle: ModuleStepHandle) -> StepStartFnResult {
     let builder = PrometheusBuilder::new();
     builder.install().expect("failed to install recorder/exporter");
 

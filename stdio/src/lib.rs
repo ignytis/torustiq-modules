@@ -36,9 +36,8 @@ extern "C" fn torustiq_module_init() {
 
 #[no_mangle]
 extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {
-    match args.kind {
-        PipelineStepKind::Source | PipelineStepKind::Destination => {},
-        _ => return ModuleStepConfigureFnResult::ErrorKindNotSupported,
+    if !(args.kind == PipelineStepKind::Source || args.kind == PipelineStepKind::Destination) {
+        return ModuleStepConfigureFnResult::ErrorKindNotSupported;
     };
     async_process::create_sender_and_receiver(args.step_handle);
     set_step_configuration(args);

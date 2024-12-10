@@ -32,9 +32,8 @@ fn torustiq_send(record: PyRecord, step_handle: ModuleStepHandle) {
 pub fn thread_sender(step_handle: ModuleStepHandle) -> impl Fn(Bound<PyModule>) {
     let f = move |module: Bound<PyModule>| {
         let run_fn = module.getattr("run").unwrap();
-        match run_fn.call1((step_handle,)) {
-            Ok(_) => {}, // Execution finished
-            Err(e) => warn!("Error on execution of 'run' Python function: {}", e),
+        if let Err(e) = run_fn.call1((step_handle,)) {
+            warn!("Error on execution of 'run' Python function: {}", e);
         };
 
         let on_step_terminate_cb = match get_step_configuration(step_handle) {
@@ -58,9 +57,8 @@ pub fn thread_receiver(step_handle: ModuleStepHandle, rx: Receiver<Record>) -> i
                 Ok(r) => r,
                 Err(_) => continue, // timeout
             }.into();
-            match process_fn.call1((in_record, step_handle)) {
-                Ok(_) => {},
-                Err(e) => warn!("Error on execution of 'process' Python function: {}", e),
+            if let Err(e) = process_fn.call1((in_record, step_handle)) {
+                warn!("Error on execution of 'process' Python function: {}", e);
             };
         }
     };

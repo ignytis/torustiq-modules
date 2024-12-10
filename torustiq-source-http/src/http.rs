@@ -1,5 +1,5 @@
 use actix_web::{post, web::{Bytes, Data}, App, HttpRequest, HttpServer, Responder};
-use log::debug;
+use log::{debug, error};
 
 use torustiq_common::ffi::{types::{
     buffer::ByteBuffer, collections::Array, functions::ModuleOnDataReceivedFn, module::{ModuleStepHandle, ModulePipelineStepConfigureArgs, Record, RecordMetadata}}, utils::strings::str_to_cchar};
@@ -10,9 +10,8 @@ pub fn run_server(args: ModulePipelineStepConfigureArgs, host: String, port: u16
         .build()
         .unwrap();
 
-    match rt.block_on(async { do_spawn_server(args, host, port).await }) {
-        Ok(_) => {},
-        Err(e) => println!("Cannot create the runtime for HTTP server: {:?}", e),
+    if let Err(e) = rt.block_on(async { do_spawn_server(args, host, port).await }) {
+        error!("Cannot create the runtime for HTTP server: {:?}", e);
     }
 }
 

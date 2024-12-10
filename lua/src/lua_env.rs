@@ -38,9 +38,8 @@ impl LuaEnv {
             Ok(f) => f,
             Err(e) => return Err(format!("{}", e)),
         };
-        match lua.globals().set("torustiq_send", fn_torustiq_send) {
-            Ok(_) => {},
-            Err(e) => return Err(format!("{}", e)),
+        if let Err(e) = lua.globals().set("torustiq_send", fn_torustiq_send) {
+            return Err(format!("{}", e));
         }
 
         let lua_env = LuaEnv {

@@ -78,13 +78,11 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
 
                 // Launcher codes: looks up the 'run(step_handle)' Lua function
                 let code = format!("{}\nrun({})", code, handle);
-                match lua.exec_code(code) {
-                    Ok(_) => {},
-                    Err(e) => error!("An error occurred in Lua sender code: {}", e)
+                if let Err(e) = lua.exec_code(code) {
+                    error!("An error occurred in Lua sender code: {}", e)
                 };
                 (args.on_step_terminate_cb)(args.step_handle);
             });
-            
         },
         _ => {
             thread::spawn(move || {
@@ -121,9 +119,8 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
                         Err(_) => continue, // timeout
                     }.into();
                     
-                    match lua.call_process_record_function(&process_func, handle, in_record) {
-                        Ok(_) => {},
-                        Err(e) => error!("ERROR: {}", e),
+                    if let Err(e) = lua.call_process_record_function(&process_func, handle, in_record) {
+                        error!("ERROR: {}", e);
                     };
                 }
             });
