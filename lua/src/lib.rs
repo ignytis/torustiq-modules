@@ -7,10 +7,10 @@ use lua_env::LuaEnv;
 
 use torustiq_common::{
     ffi::{
-        shared::{get_param, get_step_configuration, set_step_configuration},
+        shared::{get_param, get_pipeline_module_configuration, set_pipeline_module_configuration},
         types::module::{
-            ModuleInfo, ModuleKind, ModulePipelineStepConfigureArgs, ModuleStepConfigureFnResult,
-            ModuleStepHandle, StepStartFnResult, PipelineStepKind, Record
+            ModuleInfo, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
+            ModuleHandle, StepStartFnResult, PipelineModuleKind, Record
         },
         utils::strings::string_to_cchar
     },
@@ -37,15 +37,15 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {    
-    create_sender_and_receiver(args.step_handle);
-    set_step_configuration(args);
-    ModuleStepConfigureFnResult::Ok
+extern "C" fn torustiq_module_pipeline_configure(args: ModulePipelineConfigureArgs) -> ModulePipelineConfigureFnResult {
+    create_sender_and_receiver(args.module_handle);
+    set_pipeline_module_configuration(args);
+    ModulePipelineConfigureFnResult::Ok
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
-    let args = match get_step_configuration(handle) {
+extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnResult {
+    let args = match get_pipeline_module_configuration(handle) {
         Some(a) => a,
         None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
@@ -65,23 +65,23 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
         }
     };
     match args.kind {
-        PipelineStepKind::Source => {
+        PipelineModuleKind::Source => {
             thread::spawn(move || {
                 let lua = match LuaEnv::try_new() {
                     Ok(l) => l,
                     Err(e) => {
                         error!("Failed to create a Lua env in step '{}': {}", handle, e);
-                        (args.on_step_terminate_cb)(args.step_handle);
+                        (args.on_step_terminate_cb)(args.module_handle);
                         return
                     },
                 };
 
-                // Launcher codes: looks up the 'run(step_handle)' Lua function
+                // Launcher codes: looks up the 'run(module_handle)' Lua function
                 let code = format!("{}\nrun({})", code, handle);
                 if let Err(e) = lua.exec_code(code) {
                     error!("An error occurred in Lua sender code: {}", e)
                 };
-                (args.on_step_terminate_cb)(args.step_handle);
+                (args.on_step_terminate_cb)(args.module_handle);
             });
         },
         _ => {
@@ -90,7 +90,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
                     Ok(l) => l,
                     Err(e) => {
                         error!("Failed to create a Lua env in step '{}': {}", handle, e);
-                        (args.on_step_terminate_cb)(args.step_handle);
+                        (args.on_step_terminate_cb)(args.module_handle);
                         return
                     },
                 };
@@ -99,7 +99,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
                     Some(r) => r,
                     None => {
                         error!("Record receiver is not registered for step '{}'", handle);
-                        (args.on_step_terminate_cb)(args.step_handle);
+                        (args.on_step_terminate_cb)(args.module_handle);
                         return
                     }
                 };
@@ -108,7 +108,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
                     Ok(f) => f,
                     Err(e) => {
                         error!("Failed to create a Lua function in step '{}': {}", handle, e);
-                        (args.on_step_terminate_cb)(args.step_handle);
+                        (args.on_step_terminate_cb)(args.module_handle);
                         return
                     },
                 };

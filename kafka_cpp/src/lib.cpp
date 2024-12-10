@@ -9,8 +9,8 @@ const ModuleInfo MODULE_INFO = {
     .name = MODULE_NAME,
 };
 
-map<ModuleStepHandle, ModulePipelineStepConfigureArgs> ARGS;
-map<ModuleStepHandle, map<string, string>> STEP_PARAMS;
+map<ModuleHandle, ModulePipelineConfigureArgs> ARGS;
+map<ModuleHandle, map<string, string>> STEP_PARAMS;
 
 Producer *PRODUCER = nullptr;
 
@@ -24,25 +24,25 @@ extern "C" void torustiq_module_init()
     // no action
 }
 
-extern "C" ModuleStepConfigureFnResult torustiq_module_step_configure(ModulePipelineStepConfigureArgs args)
+extern "C" ModulePipelineConfigureFnResult torustiq_module_pipeline_configure(ModulePipelineConfigureArgs args)
 {
-    ModuleStepConfigureFnResult result;
+    ModulePipelineConfigureFnResult result;
     
-    if (args.kind != PipelineStepKind::Destination)
+    if (args.kind != PipelineModuleKind::Destination)
     {
         return {
-            .tag = ModuleStepConfigureFnResult::Tag::ErrorKindNotSupported,
+            .tag = ModulePipelineConfigureFnResult::Tag::ErrorKindNotSupported,
         };
     }
 
-    ARGS[args.step_handle] = args;
+    ARGS[args.module_handle] = args;
 
     return {
-        .tag = ModuleStepConfigureFnResult::Tag::Ok
+        .tag = ModulePipelineConfigureFnResult::Tag::Ok
     };
 }
 
-extern "C" void torustiq_step_set_param(ModuleStepHandle h, ConstCharPtr k, ConstCharPtr v)
+extern "C" void torustiq_module_common_set_param(ModuleHandle h, ConstCharPtr k, ConstCharPtr v)
 {
     if (!maps::key_exists(h, STEP_PARAMS))
     {
@@ -52,7 +52,7 @@ extern "C" void torustiq_step_set_param(ModuleStepHandle h, ConstCharPtr k, Cons
     STEP_PARAMS[h][string(k)] = string(v);
 }
 
-extern "C" void torustiq_module_step_shutdown(ModuleStepHandle h)
+extern "C" void torustiq_module_common_shutdown(ModuleHandle h)
 {
     if (!maps::key_exists(h, ARGS))
     {
@@ -61,16 +61,16 @@ extern "C" void torustiq_module_step_shutdown(ModuleStepHandle h)
     ARGS[h].on_step_terminate_cb(h);
 }
 
-extern "C" void torustiq_module_free_char_ptr(const char* c) {
+extern "C" void torustiq_module_common_free_char(const char* c) {
     delete c;
 }
 
-extern "C" void torustiq_module_free_record(Record r) {
+extern "C" void torustiq_module_pipeline_free_record(Record r) {
     delete r.content.bytes;
     delete r.metadata.data;
 }
 
-extern "C" StepStartFnResult torustiq_module_step_start(ModuleStepHandle h)
+extern "C" StepStartFnResult torustiq_module_common_start(ModuleHandle h)
 {
     if (!maps::key_exists(h, ARGS))
     {
@@ -94,7 +94,7 @@ extern "C" StepStartFnResult torustiq_module_step_start(ModuleStepHandle h)
         };
     }
 
-    ModulePipelineStepConfigureArgs args = ARGS[h];
+    ModulePipelineConfigureArgs args = ARGS[h];
     map<string, string> step_params = STEP_PARAMS[h];
     map<string, string> driver_params;
 
@@ -133,7 +133,7 @@ extern "C" StepStartFnResult torustiq_module_step_start(ModuleStepHandle h)
     return res;
 }
 
-extern "C" ModuleProcessRecordFnResult torustiq_module_step_process_record(Record in, ModuleStepHandle h)
+extern "C" ModulePipelineProcessRecordFnResult torustiq_module_pipeline_process_record(Record in, ModuleHandle h)
 {
     map<string, string> metadata;
     RecordMetadata *mtd_raw_last = in.metadata.data + in.metadata.len;
@@ -164,7 +164,7 @@ extern "C" ModuleProcessRecordFnResult torustiq_module_step_process_record(Recor
     if (!maps::key_exists("kafka.topic", metadata))
     {
         return {
-            .tag = ModuleProcessRecordFnResult::Tag::Err,
+            .tag = ModulePipelineProcessRecordFnResult::Tag::Err,
             .err = (new string("Missing the topic name in metadata"))->c_str(),
         };
     }
@@ -174,13 +174,13 @@ extern "C" ModuleProcessRecordFnResult torustiq_module_step_process_record(Recor
     if (err.has_value())
     {
         return {
-            .tag = ModuleProcessRecordFnResult::Tag::Err,
+            .tag = ModulePipelineProcessRecordFnResult::Tag::Err,
             .err = (new string(err.value()))->c_str(),
         };
     }
 
 
     return {
-        .tag = ModuleProcessRecordFnResult::Tag::Ok,
+        .tag = ModulePipelineProcessRecordFnResult::Tag::Ok,
     };
 }

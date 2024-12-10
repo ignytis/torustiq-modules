@@ -4,12 +4,12 @@ use log::{debug, error};
 
 use torustiq_common::{
     ffi::{
-        shared::{get_param, get_step_configuration, set_step_configuration},
+        shared::{get_param, get_pipeline_module_configuration, set_pipeline_module_configuration},
         types::{
             buffer::ByteBuffer, collections::Array,
             module::{
-                ModuleInfo, ModuleKind, ModulePipelineStepConfigureArgs, ModuleStepConfigureFnResult,
-                ModuleStepHandle, StepStartFnResult, PipelineStepKind, Record
+                ModuleInfo, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
+                ModuleHandle, StepStartFnResult, PipelineModuleKind, Record
             },
         },
         utils::strings::{bytes_to_string_safe, cchar_to_string, string_to_cchar}
@@ -35,24 +35,24 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {
-    if !(args.kind == PipelineStepKind::Source || args.kind == PipelineStepKind::Destination) {
-        return ModuleStepConfigureFnResult::ErrorKindNotSupported;
+extern "C" fn torustiq_module_pipeline_configure(args: ModulePipelineConfigureArgs) -> ModulePipelineConfigureFnResult {
+    if !(args.kind == PipelineModuleKind::Source || args.kind == PipelineModuleKind::Destination) {
+        return ModulePipelineConfigureFnResult::ErrorKindNotSupported;
     };
-    async_process::create_sender_and_receiver(args.step_handle);
-    set_step_configuration(args);
-    ModuleStepConfigureFnResult::Ok
+    async_process::create_sender_and_receiver(args.module_handle);
+    set_pipeline_module_configuration(args);
+    ModulePipelineConfigureFnResult::Ok
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
-    let args = match get_step_configuration(handle) {
+extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnResult {
+    let args = match get_pipeline_module_configuration(handle) {
         Some(a) => a,
         None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
     match args.kind {
-        PipelineStepKind::Source => {
+        PipelineModuleKind::Source => {
             thread::spawn(move || {
                 let stdin = std::io::stdin();
                 let mut lines = stdin.lines();
@@ -68,23 +68,23 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
                         content: ByteBuffer::from(content),
                         metadata: Array::new_of_len(0),
                     };
-                    (args.on_data_received_fn)(r, args.step_handle);
+                    (args.on_data_receive_cb)(r, args.module_handle);
                 }
                 debug!("End of stdin is reached. Terminating the stdin source...");
-                (args.on_step_terminate_cb)(args.step_handle);
+                (args.on_step_terminate_cb)(args.module_handle);
             });
             StepStartFnResult::Ok
         },
-        PipelineStepKind::Destination => {
+        PipelineModuleKind::Destination => {
             thread::spawn(move || {
-                let tpl = get_param(args.step_handle, "format")
+                let tpl = get_param(args.module_handle, "format")
                     .unwrap_or(String::from("%R"));
 
                 let rx = match async_process::get_receiver_owned(handle) {
                     Some(r) => r,
                     None => {
                         error!("Record receiver is not registered for step '{}'", handle);
-                        (args.on_step_terminate_cb)(args.step_handle);
+                        (args.on_step_terminate_cb)(args.module_handle);
                         return
                     }
                 };

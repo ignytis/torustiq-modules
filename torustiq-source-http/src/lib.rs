@@ -8,12 +8,12 @@ use once_cell::sync::Lazy;
 use torustiq_common::{
     ffi::{
         shared::{
-            get_step_configuration,
-            set_step_configuration
+            get_pipeline_module_configuration,
+            set_pipeline_module_configuration
         },
         types::module::{
-            ModuleInfo, ModuleKind, ModuleProcessRecordFnResult, ModulePipelineStepConfigureArgs, ModuleStepConfigureFnResult,
-            ModuleStepHandle, StepStartFnResult, PipelineStepKind, Record
+            ModuleInfo, ModuleKind, ModulePipelineProcessRecordFnResult, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
+            ModuleHandle, StepStartFnResult, PipelineModuleKind, Record
         },
         utils::strings::string_to_cchar
     },
@@ -21,7 +21,7 @@ use torustiq_common::{
     CURRENT_API_VERSION
 };
 
-static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleStepHandle, HashMap<String, String>>>> = Lazy::new(|| {
+static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleHandle, HashMap<String, String>>>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
 
@@ -44,24 +44,24 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {
-    if args.kind != PipelineStepKind::Source {
-        return ModuleStepConfigureFnResult::ErrorKindNotSupported;
+extern "C" fn torustiq_module_pipeline_configure(args: ModulePipelineConfigureArgs) -> ModulePipelineConfigureFnResult {
+    if args.kind != PipelineModuleKind::Source {
+        return ModulePipelineConfigureFnResult::ErrorKindNotSupported;
     }
 
-    set_step_configuration(args);
-    ModuleStepConfigureFnResult::Ok
+    set_pipeline_module_configuration(args);
+    ModulePipelineConfigureFnResult::Ok
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
-    let args = match get_step_configuration(handle) {
+extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnResult {
+    let args = match get_pipeline_module_configuration(handle) {
         Some(a) => a,
         None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
     let module_params_container = MODULE_PARAMS.lock().unwrap();
-    let (host, port) = match module_params_container.get(&args.step_handle) {
+    let (host, port) = match module_params_container.get(&args.module_handle) {
         Some(cfg) => (cfg.get("host"), cfg.get("port")),
         None => (None, None),
     };
@@ -75,6 +75,6 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
 
 /// Do nothing. The module is not supposed to process records from previous steps
 #[no_mangle]
-extern "C" fn torustiq_module_step_process_record(_input: Record, _h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
-    ModuleProcessRecordFnResult::Ok
+extern "C" fn torustiq_module_pipeline_process_record(_input: Record, _h: ModuleHandle) -> ModulePipelineProcessRecordFnResult {
+    ModulePipelineProcessRecordFnResult::Ok
 }

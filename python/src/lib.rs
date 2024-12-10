@@ -6,10 +6,10 @@ use std::{fs, thread};
 use py_env::{thread_python_env, thread_receiver, thread_sender};
 use torustiq_common::{
     ffi::{
-        shared::{get_param, get_step_configuration, set_step_configuration},
+        shared::{get_param, get_pipeline_module_configuration, set_pipeline_module_configuration},
         types::module::{
-            ModuleInfo, ModuleKind, ModulePipelineStepConfigureArgs, ModuleStepConfigureFnResult,
-            ModuleStepHandle, StepStartFnResult, PipelineStepKind
+            ModuleInfo, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
+            ModuleHandle, StepStartFnResult, PipelineModuleKind
         },
         utils::strings::string_to_cchar
     },
@@ -36,25 +36,25 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(step_config: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {
+extern "C" fn torustiq_module_pipeline_configure(step_config: ModulePipelineConfigureArgs) -> ModulePipelineConfigureFnResult {
     // Multiple instances of module are not supported currently because of Python's GIL.
     // There is one instance of Python environment created for process, therefore threads start
     // to lock each other. Due to this reason only one instance of Python module is allowed.
     {
         let senders = async_process::RECORD_SENDERS.lock().unwrap();
         if senders.len() > 0 {
-            return ModuleStepConfigureFnResult::ErrorMultipleStepsNotSupported(*senders.keys().next().unwrap());
+            return ModulePipelineConfigureFnResult::ErrorMultipleStepsNotSupported(*senders.keys().next().unwrap());
         }
     }
 
-    async_process::create_sender_and_receiver(step_config.step_handle);
-    set_step_configuration(step_config);
-    ModuleStepConfigureFnResult::Ok
+    async_process::create_sender_and_receiver(step_config.module_handle);
+    set_pipeline_module_configuration(step_config);
+    ModulePipelineConfigureFnResult::Ok
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
-    let step_config = match get_step_configuration(handle) {
+extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnResult {
+    let step_config = match get_pipeline_module_configuration(handle) {
         Some(c) => c,
         None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Step '{}' has no registered configuration", handle))),
     };
@@ -62,7 +62,7 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
         Some(r) => r,
         None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Step  '{}' has no registered receiver", handle))),
     };
-    let code = match get_param(step_config.step_handle, "file") {
+    let code = match get_param(step_config.module_handle, "file") {
         Some(f) => {
             match fs::read_to_string(f.clone()) {
                 Ok(c) => c,
@@ -70,18 +70,18 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
                     string_to_cchar(format!("Failed to read contents of Python file '{}': {}", f, e)))
             }
         },
-        None => match get_param(step_config.step_handle, "code_contents") {
+        None => match get_param(step_config.module_handle, "code_contents") {
             Some(c) => c,
             None => return StepStartFnResult::ErrorMisc(
                 string_to_cchar("Either 'file' or 'code_contents' attribute must be provided for Python handler")),
         }
     };
-    let step_handle = step_config.step_handle;
+    let module_handle = step_config.module_handle;
     let kind = step_config.kind.clone();
     thread::spawn(move || {
         match kind {
-            PipelineStepKind::Source => thread_python_env(code, thread_sender(step_handle)),
-            _ => thread_python_env(code, thread_receiver(step_handle, receiver)),
+            PipelineModuleKind::Source => thread_python_env(code, thread_sender(module_handle)),
+            _ => thread_python_env(code, thread_receiver(module_handle, receiver)),
         };
     });
 

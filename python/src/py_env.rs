@@ -9,47 +9,47 @@ use pyo3::prelude::*;
 use pyo3::wrap_pyfunction;
 
 use torustiq_common::ffi::{
-    shared::get_step_configuration,
-    types::module::{ModuleStepHandle, Record},
+    shared::get_pipeline_module_configuration,
+    types::module::{ModuleHandle, Record},
 };
 
 use crate::py_record;
 
 /// This function is callled from Python code to submit a record to the next step
 #[pyfunction]
-fn torustiq_send(record: PyRecord, step_handle: ModuleStepHandle) {
-    let on_data_received_fn = match get_step_configuration(step_handle) {
-        Some(c) => c.on_data_received_fn,
+fn torustiq_send(record: PyRecord, module_handle: ModuleHandle) {
+    let on_data_receive_cb = match get_pipeline_module_configuration(module_handle) {
+        Some(c) => c.on_data_receive_cb,
         None => {
-            error!("torustiq_send: invalid step handle: {}", step_handle);
+            error!("torustiq_send: invalid step handle: {}", module_handle);
             return;
         }
     };
-    on_data_received_fn(record.into(), step_handle);
+    on_data_receive_cb(record.into(), module_handle);
 }
 
 /// Returns a routine for sender thread (i.e. the first step in pipeline)
-pub fn thread_sender(step_handle: ModuleStepHandle) -> impl Fn(Bound<PyModule>) {
+pub fn thread_sender(module_handle: ModuleHandle) -> impl Fn(Bound<PyModule>) {
     let f = move |module: Bound<PyModule>| {
         let run_fn = module.getattr("run").unwrap();
-        if let Err(e) = run_fn.call1((step_handle,)) {
+        if let Err(e) = run_fn.call1((module_handle,)) {
             warn!("Error on execution of 'run' Python function: {}", e);
         };
 
-        let on_step_terminate_cb = match get_step_configuration(step_handle) {
+        let on_step_terminate_cb = match get_pipeline_module_configuration(module_handle) {
             Some(cfg) => cfg.on_step_terminate_cb,
             None => {
-                error!("Failed to load the step configuration for step '{}' in Python sender thread", step_handle);
+                error!("Failed to load the step configuration for step '{}' in Python sender thread", module_handle);
                 return;
             }
         };
-        on_step_terminate_cb(step_handle);
+        on_step_terminate_cb(module_handle);
     };
     f
 }
 
 /// Returns a routine for receiver thread (i.e. step other that the first one in pipeline)
-pub fn thread_receiver(step_handle: ModuleStepHandle, rx: Receiver<Record>) -> impl Fn(Bound<PyModule>) {
+pub fn thread_receiver(module_handle: ModuleHandle, rx: Receiver<Record>) -> impl Fn(Bound<PyModule>) {
     let f = move |module: Bound<PyModule>| {
         let process_fn = module.getattr("process").unwrap();
         loop {
@@ -57,7 +57,7 @@ pub fn thread_receiver(step_handle: ModuleStepHandle, rx: Receiver<Record>) -> i
                 Ok(r) => r,
                 Err(_) => continue, // timeout
             }.into();
-            if let Err(e) = process_fn.call1((in_record, step_handle)) {
+            if let Err(e) = process_fn.call1((in_record, module_handle)) {
                 warn!("Error on execution of 'process' Python function: {}", e);
             };
         }
@@ -72,8 +72,8 @@ pub fn thread_python_env<F>(code: String, python_routine_fn: F) where F: Fn(Boun
         let module: Bound<PyModule> = PyModule::from_code_bound(
             py,
             &code,
-            "torustiq_module_step_process_record.py",
-            "torustiq_module_step_process_record",
+            "torustiq_module_pipeline_process_record.py",
+            "torustiq_module_pipeline_process_record",
         ).unwrap();
         // Register a PyRecord class and torustiq_send Python function
         module.add_class::<py_record::PyRecord>().unwrap();

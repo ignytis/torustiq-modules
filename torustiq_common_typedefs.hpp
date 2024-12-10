@@ -15,11 +15,11 @@ enum class ModuleKind {
   /// A pipeline step module. Extracts, transforms, loads the data.
   Step,
   /// An event listener module. Reacts to application events.
-  EventListener,
+  Listener,
 };
 
 /// Specifies the position of step in pipeline
-enum class PipelineStepKind {
+enum class PipelineModuleKind {
   /// Source: produces the data itself, no input from other steps is expected.
   Source,
   /// Transformation: gets the data from the previous step (source or transformation)
@@ -32,7 +32,7 @@ enum class PipelineStepKind {
 
 using Uint = unsigned int;
 
-using ModuleStepHandle = Uint;
+using ModuleHandle = Uint;
 
 using ConstCharPtr = const char*;
 
@@ -60,7 +60,7 @@ struct Record {
 };
 
 /// A result of sending a record to further processing
-struct ModuleProcessRecordFnResult {
+struct ModulePipelineProcessRecordFnResult {
   enum class Tag {
     /// Processing succeeded. No immediate error occurred
     Ok,
@@ -91,18 +91,18 @@ using ModuleTerminationHandlerFn = void(*)(Uint);
 /// A callback for received data processed by main app. Arguments are:
 /// 1. A record: payload + metadata
 /// 2. Step handle to identity the source
-using ModuleOnDataReceivedFn = void(*)(Record, ModuleStepHandle);
+using ModuleOnDataReceiveCb = void(*)(Record, ModuleHandle);
 
 /// Arguments passed to init function
-struct ModulePipelineStepConfigureArgs {
-  PipelineStepKind kind;
-  ModuleStepHandle step_handle;
+struct ModulePipelineConfigureArgs {
+  PipelineModuleKind kind;
+  ModuleHandle module_handle;
   ModuleTerminationHandlerFn on_step_terminate_cb;
-  ModuleOnDataReceivedFn on_data_received_fn;
+  ModuleOnDataReceiveCb on_data_receive_cb;
 };
 
 /// Returns the status of module step configuration
-struct ModuleStepConfigureFnResult {
+struct ModulePipelineConfigureFnResult {
   enum class Tag {
     /// Configuration succeeded
     Ok,
@@ -118,7 +118,7 @@ struct ModuleStepConfigureFnResult {
   };
 
   struct ErrorMultipleStepsNotSupported_Body {
-    ModuleStepHandle _0;
+    ModuleHandle _0;
   };
 
   struct ErrorMisc_Body {
@@ -156,19 +156,19 @@ using ConstCStrPtr = const int8_t*;
 extern "C" {
 
 /// Sets a parameter for step
-void torustiq_step_set_param(ModuleStepHandle h, ConstCharPtr k, ConstCharPtr v);
+void torustiq_module_common_set_param(ModuleHandle h, ConstCharPtr k, ConstCharPtr v);
 
 /// Called by main application to trigger the shutdown
-void torustiq_module_step_shutdown(ModuleStepHandle h);
+void torustiq_module_common_shutdown(ModuleHandle h);
 
 /// Deallocates memory for a record
-void torustiq_module_free_record(Record r);
+void torustiq_module_pipeline_free_record(Record r);
 
 /// Deallocates memory for a record
-void torustiq_module_free_char_ptr(ConstCharPtr c);
+void torustiq_module_common_free_char(ConstCharPtr c);
 
-ModuleProcessRecordFnResult torustiq_module_step_process_record(Record in_record,
-                                                                ModuleStepHandle step_handle);
+ModulePipelineProcessRecordFnResult torustiq_module_pipeline_process_record(Record in_record,
+                                                                ModuleHandle module_handle);
 
 }  // extern "C"
 

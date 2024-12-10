@@ -12,13 +12,13 @@ use once_cell::sync::Lazy;
 use torustiq_common::{
     ffi::{
         shared::{
-            get_params, get_step_configuration, set_step_configuration
+            get_params, get_pipeline_module_configuration, set_pipeline_module_configuration
         },
         types::{
             module::{
-                ModuleInfo, ModuleProcessRecordFnResult, ModulePipelineStepConfigureArgs,
-                ModuleStepConfigureFnResult, ModuleStepHandle, StepStartFnResult,
-                PipelineStepKind, Record
+                ModuleInfo, ModulePipelineProcessRecordFnResult, ModulePipelineConfigureArgs,
+                ModulePipelineConfigureFnResult, ModuleHandle, StepStartFnResult,
+                PipelineModuleKind, Record
             },
             std_types::ConstCStrPtr
     },
@@ -47,23 +47,23 @@ extern "C" fn torustiq_module_init() {
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_configure(args: ModulePipelineStepConfigureArgs) -> ModuleStepConfigureFnResult {
-    if args.kind != PipelineStepKind::Destination {
-        return ModuleStepConfigureFnResult::ErrorKindNotSupported
+extern "C" fn torustiq_module_pipeline_configure(args: ModulePipelineConfigureArgs) -> ModulePipelineConfigureFnResult {
+    if args.kind != PipelineModuleKind::Destination {
+        return ModulePipelineConfigureFnResult::ErrorKindNotSupported
     }
     
-    set_step_configuration(args);
-    ModuleStepConfigureFnResult::Ok
+    set_pipeline_module_configuration(args);
+    ModulePipelineConfigureFnResult::Ok
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartFnResult {
-    let args = match get_step_configuration(handle) {
+extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnResult {
+    let args = match get_pipeline_module_configuration(handle) {
         Some(a) => a,
         None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
 
-    let step_params = match get_params(args.step_handle) {
+    let step_params = match get_params(args.module_handle) {
         Some(p) => p,
         None => HashMap::new(),
     };
@@ -83,17 +83,17 @@ extern "C" fn torustiq_module_step_start(handle: ModuleStepHandle) -> StepStartF
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_step_process_record(input: Record, _h: ModuleStepHandle) -> ModuleProcessRecordFnResult {
+extern "C" fn torustiq_module_pipeline_process_record(input: Record, _h: ModuleHandle) -> ModulePipelineProcessRecordFnResult {
     let producer = match PRODUCER.lock().unwrap().clone() {
         Some(p) => p,
         None => {
             error!("Cannot send a message to Kafka: producer is offline");
-            return ModuleProcessRecordFnResult::Ok
+            return ModulePipelineProcessRecordFnResult::Ok
         }
     };
     // TODO:
     // Instead of blocking, process a message using channel
-    // Consider moving the torustiq_module_step_process_record function into common module, so all modules are expected
+    // Consider moving the torustiq_module_pipeline_process_record function into common module, so all modules are expected
     //   to process records in async mode (using channels)
     let mtd = input.get_metadata_as_hashmap();
     let headers: HashMap<String, String> = mtd
@@ -111,5 +111,5 @@ extern "C" fn torustiq_module_step_process_record(input: Record, _h: ModuleStepH
     })) {
         print!("Failed to send a message to Kafka: {}", e)
     }
-    ModuleProcessRecordFnResult::Ok
+    ModulePipelineProcessRecordFnResult::Ok
 }
