@@ -57,9 +57,16 @@ extern "C" fn torustiq_module_common_start(handle: module_types::ModuleHandle) -
             string_to_cchar(format!("Cannot listen a socket on host '{}' and port '{}': {}", host, port, e)));
     }
     debug!("Started Prometheus metrics server on '{}'.", sock_addr_str);
-    metrics::gauge!("count_test").set(0.0);
 
-    metrics::gauge!("count_test").increment(10.0);
+    // Init I/O metrics
+    params.iter().for_each(|(k, v)| {
+        if k.starts_with("pipeline.steps") && k.ends_with(".id") {
+            let labels = [("step_id", format!("{}!", v.clone()))];
+            metrics::gauge!("pipeline_steps__msg_in", &labels).set(0.0);
+            metrics::gauge!("pipeline_steps__msg_out", &labels).set(0.0);
+            metrics::gauge!("pipeline_steps__errors_num", &labels).set(0.0);
+        }
+    });
 
     module_types::StepStartFnResult::Ok
 }
