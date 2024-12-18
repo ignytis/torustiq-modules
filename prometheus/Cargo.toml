@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 torustiq-common = { path = "../../torustiq-common", features = ["module_essentials", "export_fn__step_shutdown"] }
+log = "0.4.21"
 metrics-exporter-prometheus = "0.16.0"
+metrics = "0.24.1"
 
 [lib]
 crate-type = ["cdylib"]
