@@ -61,7 +61,7 @@ extern "C" fn torustiq_module_common_start(handle: module_types::ModuleHandle) -
     // Init I/O metrics
     params.iter().for_each(|(k, v)| {
         if k.starts_with("pipeline.steps") && k.ends_with(".id") {
-            let labels = [("step_id", format!("{}!", v.clone()))];
+            let labels = [("step_id", format!("{}", v.clone()))];
             metrics::gauge!("pipeline_steps__msg_in", &labels).set(0.0);
             metrics::gauge!("pipeline_steps__msg_out", &labels).set(0.0);
             metrics::gauge!("pipeline_steps__errors_num", &labels).set(0.0);
