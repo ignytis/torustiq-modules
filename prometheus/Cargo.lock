@@ -1108,6 +1108,7 @@ dependencies = [
  "log",
  "metrics",
  "metrics-exporter-prometheus",
+ "once_cell",
  "torustiq-common",
 ]
 

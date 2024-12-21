@@ -1,6 +1,13 @@
+mod metrics;
+
 use log::debug;
+use metrics::{init, thread_refresh};
 use metrics_exporter_prometheus::PrometheusBuilder;
-use std::{collections::HashMap, net::SocketAddrV4};
+use std::{
+    collections::HashMap,
+    net::SocketAddrV4,
+    thread,
+};
 
 use torustiq_common::{
     ffi::{
@@ -20,6 +27,8 @@ const MODULE_INFO: module_types::ModuleInfo = module_types::ModuleInfo {
 
 const DEFAULT_LISTEN_HOST: &str = "0.0.0.0";
 const DEFAULT_LISTEN_PORT: &str = "9000";
+
+
 
 #[no_mangle]
 pub extern "C" fn torustiq_module_get_info() -> module_types::ModuleInfo {
@@ -58,15 +67,11 @@ extern "C" fn torustiq_module_common_start(handle: module_types::ModuleHandle) -
     }
     debug!("Started Prometheus metrics server on '{}'.", sock_addr_str);
 
-    // Init I/O metrics
-    params.iter().for_each(|(k, v)| {
-        if k.starts_with("pipeline.steps") && k.ends_with(".id") {
-            let labels = [("step_id", format!("{}", v.clone()))];
-            metrics::gauge!("pipeline_steps_msg_in", &labels).set(0.0);
-            metrics::gauge!("pipeline_steps_msg_out", &labels).set(0.0);
-            metrics::gauge!("pipeline_steps_errors_num", &labels).set(0.0);
-        }
-    });
+    if let Err(e) = init(handle) {
+        return module_types::StepStartFnResult::ErrorMisc(
+            string_to_cchar(format!("Failed to init metrics for handle '{}': {}", handle, e)));
+    }
+    thread::spawn(thread_refresh);
 
     module_types::StepStartFnResult::Ok
 }

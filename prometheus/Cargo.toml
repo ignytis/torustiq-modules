@@ -8,6 +8,7 @@ torustiq-common = { path = "../../torustiq-common", features = ["module_essentia
 log = "0.4.21"
 metrics-exporter-prometheus = "0.16.0"
 metrics = "0.24.1"
+once_cell = "1.19.0"
 
 [lib]
 crate-type = ["cdylib"]
