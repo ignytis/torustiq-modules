@@ -1,13 +1,14 @@
 mod metrics;
 
-use log::debug;
-use metrics::{init, thread_refresh};
-use metrics_exporter_prometheus::PrometheusBuilder;
 use std::{
     collections::HashMap,
     net::SocketAddrV4,
     thread,
 };
+
+use log::debug;
+use metrics::{init, thread_refresh};
+use metrics_exporter_prometheus::PrometheusBuilder;
 
 use torustiq_common::{
     ffi::{
@@ -74,4 +75,19 @@ extern "C" fn torustiq_module_common_start(handle: module_types::ModuleHandle) -
     thread::spawn(thread_refresh);
 
     module_types::StepStartFnResult::Ok
+}
+
+#[no_mangle]
+extern "C" fn torustiq_module_listener_record_rcv(handle: module_types::ModuleHandle, _record: *const module_types::Record)  {
+    metrics::inc_stats_msg_in(handle);
+}
+
+#[no_mangle]
+extern "C" fn torustiq_module_listener_record_send_failure(handle: module_types::ModuleHandle, _record: *const module_types::Record)  {
+    metrics::inc_stats_errors_num(handle);
+}
+
+#[no_mangle]
+extern "C" fn torustiq_module_listener_record_send_success(handle: module_types::ModuleHandle, _record: *const module_types::Record)  {
+    metrics::inc_stats_msg_out  (handle);
 }
