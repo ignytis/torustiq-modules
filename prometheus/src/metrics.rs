@@ -11,21 +11,34 @@ use torustiq_common::ffi::{
     types::module as module_types,
 };
 
+#[derive(Clone)]
+struct IoMetric {
+    module_id: String,
+    /// Number of messages sent/received
+    num: usize,
+    /// Total size of transmitted data
+    size_bytes: usize,
+}
+
+impl IoMetric {
+    fn new(module_id: String) -> IoMetric {
+        IoMetric {
+            module_id,
+            num: 0,
+            size_bytes: 0,
+        }
+    }
+}
+
 /// Key: module handle
 /// Value:
 /// 1. Module ID
 /// 2. Metric value
-type GaugeContainer = Lazy<Mutex<HashMap<module_types::ModuleHandle, (String, usize)>>>;
+type GaugeContainer = Lazy<Mutex<HashMap<module_types::ModuleHandle, IoMetric>>>;
 
-pub static STATS_MSG_IN: GaugeContainer = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
-pub static STATS_MSG_OUT: GaugeContainer = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
-pub static STATS_ERRORS_NUM: GaugeContainer = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
+static STATS_MSG_IN: GaugeContainer = Lazy::new(|| Mutex::default());
+static STATS_MSG_OUT: GaugeContainer = Lazy::new(|| Mutex::default());
+static STATS_ERRORS_NUM: GaugeContainer = Lazy::new(|| Mutex::default());
 
 /// Initializes metrics
 pub fn init(handle: module_types::ModuleHandle) -> Result<(), String> {
@@ -71,26 +84,28 @@ pub fn init(handle: module_types::ModuleHandle) -> Result<(), String> {
     }
 
     pipeline_step_cfg_parsed.iter().for_each(|(_k, (step_handle, step_id))| {
-        stats_msg_in.insert(*step_handle, (step_id.clone(), 0));
-        stats_msg_out.insert(*step_handle, (step_id.clone(), 0));
-        stats_errors_num.insert(*step_handle, (step_id.clone(), 0));
+        stats_msg_in.insert(*step_handle, IoMetric::new(step_id.clone()));
+        stats_msg_out.insert(*step_handle, IoMetric::new(step_id.clone()));
+        stats_errors_num.insert(*step_handle, IoMetric::new(step_id.clone()));
     });
     Ok(())
 }
 
-fn update_gauge(mtx: &GaugeContainer, metric_name: String, handle: module_types::ModuleHandle) {
+fn update_records_stats(mtx: &GaugeContainer, metric_suffix: &str, handle: module_types::ModuleHandle) {
     let hashmap = match mtx.lock() {
         Ok(s) => s,
         Err(e) => {
-            log::error!("Failed to obtain a pointer to {} stats: {}", metric_name, e);
+            log::error!("Failed to obtain a pointer to metric '{}' in handle '{}' stats: {}", metric_suffix, handle, e);
             return
         },
     };
-    let (step_id, val) = match hashmap.get(&handle) {
+    let metric= match hashmap.get(&handle) {
         Some(v) => v,
         None => return
     };
-    metrics::gauge!(metric_name, "step_id" => step_id.clone()).set(*val as  f64);
+
+    metrics::gauge!(format!("pipeline_steps_{}_num", metric_suffix), "step_id" => metric.module_id.clone()).set(metric.num as  f64);
+    metrics::gauge!(format!("pipeline_steps_{}_size_total_bytes", metric_suffix), "step_id" => metric.module_id.clone()).set(metric.size_bytes as  f64);
 }
 
 /// A thread routine which periodically refreshes metrics on HTTP listener
@@ -107,37 +122,40 @@ pub fn thread_refresh() {
     };
     loop {
         for handle in &handles {
-            update_gauge(&STATS_MSG_IN, String::from("pipeline_steps_msg_in"), *handle);
-            update_gauge(&STATS_MSG_OUT, String::from("pipeline_steps_msg_out"), *handle);
-            update_gauge(&STATS_ERRORS_NUM, String::from("pipeline_steps_errors_num"), *handle);
+            update_records_stats(&STATS_MSG_IN, "msg_in", *handle);
+            update_records_stats(&STATS_MSG_OUT, "msg_out", *handle);
+            update_records_stats(&STATS_ERRORS_NUM, "errors", *handle);
         }
         sleep(Duration::from_secs(5));
     }
 }
 
-pub fn inc_stats_msg_in(handle: module_types::ModuleHandle) {
+pub fn inc_stats_msg_in(handle: module_types::ModuleHandle, record: *const module_types::Record) {
     let mut hashmap = STATS_MSG_IN.lock().unwrap();
-    let (step_id, num) = match hashmap.get(&handle) {
-        Some(v) => (v.0.clone(), v.1),
+    let metric = match hashmap.get_mut(&handle) {
+        Some(v) => v,
         None => return
     };
-    hashmap.insert(handle, (step_id.clone(), num + 1));
+    metric.num += 1;
+    metric.size_bytes += unsafe { record.as_ref().unwrap().get_content_len() };
 }
 
-pub fn inc_stats_msg_out(handle: module_types::ModuleHandle) {
+pub fn inc_stats_msg_out(handle: module_types::ModuleHandle, record: *const module_types::Record) {
     let mut hashmap = STATS_MSG_OUT.lock().unwrap();
-    let (step_id, num) = match hashmap.get(&handle) {
-        Some(v) => (v.0.clone(), v.1),
+    let metric = match hashmap.get_mut(&handle) {
+        Some(v) => v,
         None => return
     };
-    hashmap.insert(handle, (step_id.clone(), num + 1));
+    metric.num += 1;
+    metric.size_bytes += unsafe { record.as_ref().unwrap().get_content_len() };
 }
 
-pub fn inc_stats_errors_num(handle: module_types::ModuleHandle) {
+pub fn inc_stats_errors_num(handle: module_types::ModuleHandle, record: *const module_types::Record) {
     let mut hashmap = STATS_ERRORS_NUM.lock().unwrap();
-    let (step_id, num) = match hashmap.get(&handle) {
-        Some(v) => (v.0.clone(), v.1),
+    let metric = match hashmap.get_mut(&handle) {
+        Some(v) => v,
         None => return
     };
-    hashmap.insert(handle, (step_id.clone(), num + 1));
+    metric.num += 1;
+    metric.size_bytes += unsafe { record.as_ref().unwrap().get_content_len() };
 }
