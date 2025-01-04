@@ -19,7 +19,7 @@ use torustiq_common::{
     CURRENT_API_VERSION,
 };
 
-const MODULE_INFO: module_types::ModuleInfo = module_types::ModuleInfo {
+const MODULE_INFO: module_types::LibInfo = module_types::LibInfo {
     api_version: CURRENT_API_VERSION,
     id: c"prometheus".as_ptr(),
     kind: module_types::ModuleKind::Listener,
@@ -32,7 +32,7 @@ const DEFAULT_LISTEN_PORT: &str = "9000";
 
 
 #[no_mangle]
-pub extern "C" fn torustiq_module_get_info() -> module_types::ModuleInfo {
+pub extern "C" fn torustiq_module_get_info() -> module_types::LibInfo {
     MODULE_INFO
 }
 

@@ -12,14 +12,10 @@ use once_cell::sync::Lazy;
 use torustiq_common::{
     ffi::{
         shared::{
-            get_params, get_pipeline_module_configuration, set_pipeline_module_configuration
+            get_params, get_pipeline_module_configuration, set_pipeline_lib_configuration, set_pipeline_module_configuration
         },
         types::{
-            module::{
-                ModuleInfo, ModulePipelineProcessRecordFnResult, ModulePipelineConfigureArgs,
-                ModulePipelineConfigureFnResult, ModuleHandle, StepStartFnResult,
-                PipelineModuleKind, Record
-            },
+            module as module_types,
             std_types::ConstCStrPtr
     },
     utils::strings::string_to_cchar},
@@ -27,7 +23,7 @@ use torustiq_common::{
 };
 use crate::kafka_producer::KafkaProducer;
 
-const MODULE_INFO: ModuleInfo = ModuleInfo {
+const MODULE_INFO: LibInfo = LibInfo {
     id: c"kafka".as_ptr(),
     name: c"Kafka output".as_ptr(),
 };
@@ -37,12 +33,13 @@ static PRODUCER: Lazy<Mutex<Option<KafkaProducer>>> = Lazy::new(|| {
 });
 
 #[no_mangle]
-pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
+pub extern "C" fn torustiq_module_get_info() -> LibInfo {
     MODULE_INFO
 }
 
 #[no_mangle]
-extern "C" fn torustiq_module_init() {
+extern "C" fn torustiq_module_init(a: module_types::LibPipelineInitArgs) {
+    set_pipeline_lib_configuration(a);
     init_logger();
 }
 

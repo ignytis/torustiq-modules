@@ -12,7 +12,7 @@ use torustiq_common::{
             set_pipeline_module_configuration
         },
         types::module::{
-            ModuleInfo, ModuleKind, ModulePipelineProcessRecordFnResult, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
+            LibInfo, ModuleKind, ModulePipelineProcessRecordFnResult, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
             ModuleHandle, StepStartFnResult, PipelineModuleKind, Record
         },
         utils::strings::string_to_cchar
@@ -25,7 +25,7 @@ static MODULE_PARAMS: Lazy<Mutex<HashMap<ModuleHandle, HashMap<String, String>>>
     Mutex::new(HashMap::new())
 });
 
-const MODULE_INFO: ModuleInfo = ModuleInfo {
+const MODULE_INFO: LibInfo = LibInfo {
     api_version: CURRENT_API_VERSION,
     id: c"source_http".as_ptr(),
     kind: ModuleKind::Pipeline,
@@ -33,7 +33,7 @@ const MODULE_INFO: ModuleInfo = ModuleInfo {
 };
 
 #[no_mangle]
-pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
+pub extern "C" fn torustiq_module_get_info() -> LibInfo {
     MODULE_INFO
 }
 

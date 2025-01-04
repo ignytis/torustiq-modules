@@ -7,19 +7,17 @@ use lua_env::LuaEnv;
 
 use torustiq_common::{
     ffi::{
-        shared::{get_param, get_pipeline_module_configuration, set_pipeline_module_configuration},
+        shared::{get_common_lib_configuration, get_param, get_pipeline_module_configuration, set_pipeline_module_configuration},
         types::module::{
-            ModuleInfo, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
-            ModuleHandle, StepStartFnResult, PipelineModuleKind, Record
+            LibInfo, ModuleHandle, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult, PipelineModuleKind, Record, StepStartFnResult
         },
         utils::strings::string_to_cchar
     },
-    logging::init_logger,
     pipeline::async_process::{self, create_sender_and_receiver},
     CURRENT_API_VERSION,
 };
 
-const MODULE_INFO: ModuleInfo = ModuleInfo {
+const MODULE_INFO: LibInfo = LibInfo {
     api_version: CURRENT_API_VERSION,
     id: c"lua".as_ptr(),
     kind: ModuleKind::Pipeline,
@@ -27,13 +25,8 @@ const MODULE_INFO: ModuleInfo = ModuleInfo {
 };
 
 #[no_mangle]
-pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
+pub extern "C" fn torustiq_module_get_info() -> LibInfo {
     MODULE_INFO
-}
-
-#[no_mangle]
-extern "C" fn torustiq_module_init() {
-    init_logger();
 }
 
 #[no_mangle]
@@ -49,6 +42,7 @@ extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnR
         Some(a) => a,
         None => return StepStartFnResult::ErrorMisc(string_to_cchar(format!("Init args for step '{}' not found", handle)))
     };
+    let lib_args = get_common_lib_configuration().unwrap();
 
     let code = match get_param(handle, "file") {
         Some(f) => {
@@ -71,7 +65,7 @@ extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnR
                     Ok(l) => l,
                     Err(e) => {
                         error!("Failed to create a Lua env in step '{}': {}", handle, e);
-                        (args.on_step_terminate_cb)(args.module_handle);
+                        (lib_args.on_step_terminate_cb)(args.module_handle);
                         return
                     },
                 };
@@ -81,7 +75,7 @@ extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnR
                 if let Err(e) = lua.exec_code(code) {
                     error!("An error occurred in Lua sender code: {}", e)
                 };
-                (args.on_step_terminate_cb)(args.module_handle);
+                (lib_args.on_step_terminate_cb)(args.module_handle);
             });
         },
         _ => {
@@ -90,7 +84,7 @@ extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnR
                     Ok(l) => l,
                     Err(e) => {
                         error!("Failed to create a Lua env in step '{}': {}", handle, e);
-                        (args.on_step_terminate_cb)(args.module_handle);
+                        (lib_args.on_step_terminate_cb)(args.module_handle);
                         return
                     },
                 };
@@ -99,7 +93,7 @@ extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnR
                     Some(r) => r,
                     None => {
                         error!("Record receiver is not registered for step '{}'", handle);
-                        (args.on_step_terminate_cb)(args.module_handle);
+                        (lib_args.on_step_terminate_cb)(args.module_handle);
                         return
                     }
                 };
@@ -108,7 +102,7 @@ extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnR
                     Ok(f) => f,
                     Err(e) => {
                         error!("Failed to create a Lua function in step '{}': {}", handle, e);
-                        (args.on_step_terminate_cb)(args.module_handle);
+                        (lib_args.on_step_terminate_cb)(args.module_handle);
                         return
                     },
                 };

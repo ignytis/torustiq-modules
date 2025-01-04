@@ -8,7 +8,7 @@ use torustiq_common::{
     ffi::{
         shared::{get_param, get_pipeline_module_configuration, set_pipeline_module_configuration},
         types::module::{
-            ModuleInfo, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
+            LibInfo, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
             ModuleHandle, StepStartFnResult, PipelineModuleKind
         },
         utils::strings::string_to_cchar
@@ -18,7 +18,7 @@ use torustiq_common::{
     CURRENT_API_VERSION,
 };
 
-const MODULE_INFO: ModuleInfo = ModuleInfo {
+const MODULE_INFO: LibInfo = LibInfo {
     api_version: CURRENT_API_VERSION,
     id: c"python".as_ptr(),
     kind: ModuleKind::Pipeline,
@@ -26,7 +26,7 @@ const MODULE_INFO: ModuleInfo = ModuleInfo {
 };
 
 #[no_mangle]
-pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
+pub extern "C" fn torustiq_module_get_info() -> LibInfo {
     MODULE_INFO
 }
 

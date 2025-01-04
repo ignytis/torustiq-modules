@@ -79,7 +79,7 @@ struct ModulePipelineProcessRecordFnResult {
 };
 
 /// Module information
-struct ModuleInfo {
+struct LibInfo {
   Uint api_version;
   ConstCharPtr id;
   ModuleKind kind;

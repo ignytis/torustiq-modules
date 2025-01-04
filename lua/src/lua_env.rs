@@ -4,15 +4,16 @@ use log::error;
 use mlua::{Function, Lua};
 
 use torustiq_common::ffi::{
-    shared::get_pipeline_module_configuration,
+    shared::get_pipeline_lib_configuration,
     types::module::{ModuleHandle, Record},
 };
 
 fn torustiq_send(record: Record, module_handle: ModuleHandle) {
-    let on_data_receive_cb = match get_pipeline_module_configuration(module_handle) {
+    let on_data_receive_cb = match get_pipeline_lib_configuration() {
+        // TODO: init mut ptr here!!!
         Some(c) => c.on_data_receive_cb,
         None => {
-            error!("torustiq_send: invalid step handle: {}", module_handle);
+            error!("torustiq_send: failed to load the module configuration");
             return;
         }
     };

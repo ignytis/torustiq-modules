@@ -2,7 +2,7 @@
 
 const char *MODULE_ID = "kafka_cpp";
 const char *MODULE_NAME = "C++ implementation of Kafka";
-const ModuleInfo MODULE_INFO = {
+const LibInfo MODULE_INFO = {
     .api_version = CURRENT_API_VERSION,
     .id = MODULE_ID,
     .kind = ModuleKind::Pipeline,
@@ -14,7 +14,7 @@ map<ModuleHandle, map<string, string>> STEP_PARAMS;
 
 Producer *PRODUCER = nullptr;
 
-extern "C" ModuleInfo torustiq_module_get_info()
+extern "C" LibInfo torustiq_module_get_info()
 {
     return MODULE_INFO;
 }

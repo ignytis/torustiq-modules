@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-torustiq-common = { path = "../../torustiq-common", features = ["module_essentials", "export_fn__step_shutdown"] }
+torustiq-common = { path = "../../torustiq-common", features = ["module_listener_all"] }
 log = "0.4.21"
 metrics-exporter-prometheus = "0.16.0"
 metrics = "0.24.1"

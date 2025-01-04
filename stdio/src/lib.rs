@@ -8,7 +8,7 @@ use torustiq_common::{
         types::{
             buffer::ByteBuffer, collections::Array,
             module::{
-                ModuleInfo, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
+                LibInfo, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult,
                 ModuleHandle, StepStartFnResult, PipelineModuleKind, Record
             },
         },
@@ -17,7 +17,7 @@ use torustiq_common::{
     logging::init_logger, pipeline::async_process,
     CURRENT_API_VERSION};
 
-const MODULE_INFO: ModuleInfo = ModuleInfo {
+const MODULE_INFO: LibInfo = LibInfo {
     api_version: CURRENT_API_VERSION,
     id: c"stdio".as_ptr(),
     kind: ModuleKind::Pipeline,
@@ -25,7 +25,7 @@ const MODULE_INFO: ModuleInfo = ModuleInfo {
 };
 
 #[no_mangle]
-pub extern "C" fn torustiq_module_get_info() -> ModuleInfo {
+pub extern "C" fn torustiq_module_get_info() -> LibInfo {
     MODULE_INFO
 }
 
