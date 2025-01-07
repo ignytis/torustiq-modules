@@ -115,7 +115,7 @@ extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnR
                     
                     if let Err(e) = lua.call_process_record_function(&process_func, handle, in_record) {
                         error!("ERROR: {}", e);
-                    };
+                    }
                 }
             });
         },

@@ -1,24 +1,26 @@
 use std::collections::HashMap;
 
-use log::error;
-use mlua::{Function, Lua};
+use mlua::{Function, prelude::*};
 
 use torustiq_common::ffi::{
     shared::get_pipeline_lib_configuration,
     types::module::{ModuleHandle, Record},
 };
 
-fn torustiq_send(record: Record, module_handle: ModuleHandle) {
-    let on_data_receive_cb = match get_pipeline_lib_configuration() {
-        // TODO: init mut ptr here!!!
-        Some(c) => c.on_data_receive_cb,
-        None => {
-            error!("torustiq_send: failed to load the module configuration");
-            return;
-        }
-    };
+const LUA_SEND_ERROR: &str = "torustiq_send: failed to load the module configuration";
 
-    on_data_receive_cb(record.into(), module_handle);
+fn torustiq_send(_: &Lua, params: (ModuleHandle, String, HashMap<String, String>)) -> Result<(), LuaError> {
+    let on_data_receive_cb = match get_pipeline_lib_configuration() {
+        Some(c) => c.on_data_receive_cb.clone(),
+        None => {
+            log::error!("{}", LUA_SEND_ERROR);
+            return Err(LuaError::RuntimeError(String::from(LUA_SEND_ERROR)))
+        },
+    };
+    let (module_handle, content, metadata) = params;
+    let record = Record::from_std_types(content.as_bytes().to_vec(), metadata);
+    on_data_receive_cb(module_handle, record);
+    Ok(())
 }
 
 /// Lua environment with pre-configured Torustiq functions
@@ -29,13 +31,7 @@ pub struct LuaEnv {
 impl LuaEnv {
     pub fn try_new() -> Result<Self, String> {        
         let lua = Lua::new();
-        let fn_torustiq_send = match lua
-            .create_function(|_, (module_handle, content, metadata):
-                (ModuleHandle, String, HashMap<String, String>)| {
-            let record = Record::from_std_types(content.as_bytes().to_vec(), metadata);
-            torustiq_send(record, module_handle);
-            Ok(())
-        }) {
+        let fn_torustiq_send = match lua.create_function(torustiq_send) {
             Ok(f) => f,
             Err(e) => return Err(format!("{}", e)),
         };
@@ -70,5 +66,4 @@ impl LuaEnv {
             Err(e) => Err(format!("Function call failure: {}", e))
         }
     }
-
 }
