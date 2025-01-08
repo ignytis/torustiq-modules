@@ -1,19 +1,18 @@
 mod lua_env;
+mod threads;
 
-use std::{fs, thread, time::Duration};
-
-use log::error;
-use lua_env::LuaEnv;
+use std::{fs, thread};
 
 use torustiq_common::{
     ffi::{
         shared::{get_common_lib_configuration, get_param, get_pipeline_module_configuration, set_pipeline_module_configuration},
         types::module::{
-            LibInfo, ModuleHandle, ModuleKind, ModulePipelineConfigureArgs, ModulePipelineConfigureFnResult, PipelineModuleKind, Record, StepStartFnResult
+            LibInfo, ModuleHandle, ModuleKind, ModulePipelineConfigureArgs,
+            ModulePipelineConfigureFnResult, PipelineModuleKind, StepStartFnResult
         },
         utils::strings::string_to_cchar
     },
-    pipeline::async_process::{self, create_sender_and_receiver},
+    pipeline::async_process::create_sender_and_receiver,
     CURRENT_API_VERSION,
 };
 
@@ -58,67 +57,15 @@ extern "C" fn torustiq_module_common_start(handle: ModuleHandle) -> StepStartFnR
                 string_to_cchar("Either 'file' or 'code_contents' attribute must be provided for Lua handler")),
         }
     };
-    match args.kind {
-        PipelineModuleKind::Source => {
-            thread::spawn(move || {
-                let lua = match LuaEnv::try_new() {
-                    Ok(l) => l,
-                    Err(e) => {
-                        error!("Failed to create a Lua env in step '{}': {}", handle, e);
-                        (lib_args.on_step_terminate_cb)(args.module_handle);
-                        return
-                    },
-                };
-
-                // Launcher codes: looks up the 'run(module_handle)' Lua function
-                let code = format!("{}\nrun({})", code, handle);
-                if let Err(e) = lua.exec_code(code) {
-                    error!("An error occurred in Lua sender code: {}", e)
-                };
-                (lib_args.on_step_terminate_cb)(args.module_handle);
-            });
-        },
-        _ => {
-            thread::spawn(move || {
-                let lua = match LuaEnv::try_new() {
-                    Ok(l) => l,
-                    Err(e) => {
-                        error!("Failed to create a Lua env in step '{}': {}", handle, e);
-                        (lib_args.on_step_terminate_cb)(args.module_handle);
-                        return
-                    },
-                };
-
-                let rx = match async_process::get_receiver_owned(handle) {
-                    Some(r) => r,
-                    None => {
-                        error!("Record receiver is not registered for step '{}'", handle);
-                        (lib_args.on_step_terminate_cb)(args.module_handle);
-                        return
-                    }
-                };
-
-                let process_func = match lua.create_function_from_code(code) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        error!("Failed to create a Lua function in step '{}': {}", handle, e);
-                        (lib_args.on_step_terminate_cb)(args.module_handle);
-                        return
-                    },
-                };
-
-                loop {
-                    let in_record: Record = match rx.recv_timeout(Duration::from_secs(1)) {
-                        Ok(r) => r,
-                        Err(_) => continue, // timeout
-                    }.into();
-                    
-                    if let Err(e) = lua.call_process_record_function(&process_func, handle, in_record) {
-                        error!("ERROR: {}", e);
-                    }
-                }
-            });
-        },
+    let args_kind = args.kind.clone();
+    let thread_args = threads::ThreadArgs {
+        code,
+        lib_args,
+        module_args: args,
+    };
+    match args_kind {
+        PipelineModuleKind::Source => thread::spawn(|| threads::thread_source(thread_args)),
+        _ => thread::spawn(|| threads::thread_processor(thread_args)),
     };
     StepStartFnResult::Ok
 }
